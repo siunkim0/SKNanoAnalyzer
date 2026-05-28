@@ -92,6 +92,39 @@ for (auto &mu : *muons) {
 - Personal config: `config/config.$USER` (system type, package manager, notifications)
 - Sample lists: `SampleLists/{era}/` for different analysis categories
 
+### Submodules (CERN gitlab)
+
+Two submodules are hosted on `gitlab.cern.ch` and require **CERN gitlab SSH access** to clone properly:
+- `external/RoccoR` — Rochester muon momentum corrections (`ssh://git@gitlab.cern.ch:7999/hyseo/RoccoR.git`)
+- `external/jsonpog-integration` — CMS POG correction JSON files (`ssh://git@gitlab.cern.ch:7999/cms-nanoAOD/jsonpog-integration.git`)
+
+**With CERN gitlab access** (normal setup):
+```bash
+git submodule update --init external/RoccoR external/jsonpog-integration
+```
+
+**Without CERN gitlab access** (workaround so `git status` / `git commit` don't fail with `fatal: Not a git repository: external/RoccoR/...`): create empty stub gitdirs so git's submodule machinery is satisfied. The stubs live only in `.git/` and are not pushed.
+
+```bash
+# Create stub for RoccoR
+mkdir -p .git/modules/external/RoccoR/{objects/info,objects/pack,refs/heads,refs/tags}
+printf "ref: refs/heads/master\n" > .git/modules/external/RoccoR/HEAD
+printf "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tworktree = ../../../../external/RoccoR\n" > .git/modules/external/RoccoR/config
+
+# Create stub for jsonpog-integration (note: this gitdir lives under .git/worktrees/... due to historical layout)
+mkdir -p .git/worktrees/SKNanoAnalyzer-v13/modules/external/jsonpog-integration/{objects/info,objects/pack,refs/heads,refs/tags}
+printf "ref: refs/heads/master\n" > .git/worktrees/SKNanoAnalyzer-v13/modules/external/jsonpog-integration/HEAD
+printf "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tworktree = ../../../../../../external/jsonpog-integration\n" > .git/worktrees/SKNanoAnalyzer-v13/modules/external/jsonpog-integration/config
+```
+
+**Switching from stubs to real submodules** (once CERN access is granted):
+```bash
+rm -rf .git/modules/external/RoccoR .git/worktrees/SKNanoAnalyzer-v13
+git submodule update --init external/RoccoR external/jsonpog-integration
+```
+
+The stub workaround unblocks committing to the main repo, but the submodule contents themselves remain unusable (no corrections data) until proper init.
+
 ## Job Management
 
 ### HTCondor Integration
