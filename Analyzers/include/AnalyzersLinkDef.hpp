@@ -2,7 +2,10 @@
 #pragma link off all classes;
 #pragma link off all functions;
 #pragma link C++ nestedclasses;
-
+#pragma link C++ class DY+;
+#pragma link C++ class Skim_2023+;
+#pragma link C++ class Higgs+;
+#pragma link C++ class HiggsBDT+;
 #pragma link C++ class SKNanoLoader+;
 #pragma link C++ class AnalyzerCore+;
 #pragma link C++ class ExampleRun+;
@@ -16,6 +19,7 @@
 #pragma link C++ class GeneratorBase+;
 #pragma link C++ class DiLeptonBase+;
 #pragma link C++ class DiLepton+;
+#pragma link C++ class DiPhoton+;
 #pragma link C++ class ParseEleIDVariables+;
 #pragma link C++ class ParseMuIDVariables+;
 #pragma link C++ class TestGetLeptonType+;

@@ -3,9 +3,9 @@
     "isMC": 1,
     "PD": "TbarWplustoLNu2Q_TuneCP5_13p6TeV_powheg-pythia8",
     "xsec": 19.36,
-    "sumsign": 4366325.0,
-    "sumW": 157427416.14608765,
-    "nmc": 4366467.0,
+    "sumsign": -1,
+    "sumW": -1,
+    "nmc": -1,
     "path": [
         "/gv0/DATA/SKNano/Run3NanoAODv13p1/2022/TbarWplustoLNu2Q_TuneCP5_13p6TeV_powheg-pythia8/250617_125946/0000/NANOAOD_1.root",
         "/gv0/DATA/SKNano/Run3NanoAODv13p1/2022/TbarWplustoLNu2Q_TuneCP5_13p6TeV_powheg-pythia8/250617_125946/0000/NANOAOD_2.root",

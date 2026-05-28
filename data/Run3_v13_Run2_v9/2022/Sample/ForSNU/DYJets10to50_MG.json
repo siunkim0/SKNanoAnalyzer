@@ -3,9 +3,9 @@
     "isMC": 1,
     "PD": "DYto2L-4Jets_MLL-10to50_TuneCP5_13p6TeV_madgraphMLM-pythia8",
     "xsec": 19982.5,
-    "sumsign": 163769744.0,
-    "sumW": 3717304482359.8926,
-    "nmc": 163769744.0,
+    "sumsign": -1,
+    "sumW": -1,
+    "nmc": -1,
     "path": [
         "/gv0/DATA/SKNano/Run3NanoAODv13p1/2022/DYto2L-4Jets_MLL-10to50_TuneCP5_13p6TeV_madgraphMLM-pythia8/250617_125929/0000/NANOAOD_1.root",
         "/gv0/DATA/SKNano/Run3NanoAODv13p1/2022/DYto2L-4Jets_MLL-10to50_TuneCP5_13p6TeV_madgraphMLM-pythia8/250617_125929/0000/NANOAOD_2.root",

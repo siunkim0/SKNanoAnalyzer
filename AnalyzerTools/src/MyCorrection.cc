@@ -385,17 +385,17 @@ float MyCorrection::GetMuonIDSF(const TString &Muon_ID_SF_Key, const Muon &muon,
     if (Muon_ID_SF_Key == "TopHNT") {
         auto cset = cset_muon_TopHNT_idsf->at("sf");
         if (syst == variation::nom) {
-            return safeEvaluate(cset, "GetMuonIDSF", {fabs(muon.Eta()), muon.OriginalPt(), "nom"});
+            return safeEvaluate(cset, "GetMuonIDSF", {fabs(muon.Eta()), muon.Pt(), "nom"});
         } else if (syst == variation::up) {
-            return safeEvaluate(cset, "GetMuonIDSF", {fabs(muon.Eta()), muon.OriginalPt(), "up"});
+            return safeEvaluate(cset, "GetMuonIDSF", {fabs(muon.Eta()), muon.Pt(), "up"});
         } else if (syst == variation::down) {
-            return safeEvaluate(cset, "GetMuonIDSF", {fabs(muon.Eta()), muon.OriginalPt(), "down"});
+            return safeEvaluate(cset, "GetMuonIDSF", {fabs(muon.Eta()), muon.Pt(), "down"});
         } else {
             throw runtime_error("[MyCorrection::GetMuonIDSF] Invalid syst value");
         }
     } else {
         auto cset = cset_muon->at(string(Muon_ID_SF_Key));
-        return safeEvaluate(cset, "GetMuonIDSF", {fabs(muon.Eta()), muon.OriginalPt(), getSystString_MUO(syst)});
+        return safeEvaluate(cset, "GetMuonIDSF", {fabs(muon.Eta()), muon.Pt(), getSystString_MUO(syst)});
     }
 }
 

@@ -1,0 +1,16 @@
+DYJets
+DYJets10to50
+TTLL_powheg
+TTLJ_powheg
+# 
+WJets
+WW_pythia
+WZ_pythia
+ZZ_pythia
+# SingleTop
+ST_sch_top_Lep
+ST_tW_top_Semilep
+ST_tW_antitop_Semilep
+ST_tW_top_Lep
+ST_tW_antitop_Lep
+# QCD

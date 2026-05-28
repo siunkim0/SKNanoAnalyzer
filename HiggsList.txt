@@ -1,0 +1,12 @@
+DYJets
+DYJets10to50
+TTLL_powheg
+TTLJ_powheg
+# Ws
+WW_pythia
+WZ_pythia
+# Higgs
+ZZTo4L_powheg
+ggHToZZTo4L
+VBFHToZZTo4L
+VHToNonbb

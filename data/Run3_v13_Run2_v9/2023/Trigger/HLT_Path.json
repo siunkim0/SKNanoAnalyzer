@@ -144,10 +144,12 @@
         "lumi": 17794.0
     },
     "HLT_DoublePhoton70": {
-        "lumi": 17794.0
+        "lumi": 17794.0,
+        "active": true
     },
     "HLT_DoublePhoton85": {
-        "lumi": 17794.0
+        "lumi": 17794.0,
+        "active": true
     },
     "HLT_Ele20_WPTight_Gsf": {
         "lumi": 17794.0

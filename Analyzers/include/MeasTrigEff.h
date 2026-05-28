@@ -9,6 +9,12 @@ public:
     ~MeasTrigEff();
     void initializeAnalyzer();
     void executeEvent();
+    void measIsoMu24TrigEff(RVec<Muon> &tightMuons, 
+                            RVec<Muon> &looseMuons, 
+                            RVec<TrigObj> &trigObjs, 
+                            float &weight);
+    
+    bool PassIsoMuTrigger(const Muon &mu, const RVec<TrigObj> &trigObjs);
     void measEMuTrigEff_ElLegs(RVec<Muon> &tightMuons,
                               RVec<Muon> &vetoMuons,
                               RVec<Electron> &tightElectrons,

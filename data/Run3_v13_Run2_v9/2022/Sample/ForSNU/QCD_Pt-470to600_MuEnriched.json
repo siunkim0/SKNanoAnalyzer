@@ -3,9 +3,9 @@
     "isMC": 1,
     "PD": "QCD_PT-470to600_MuEnrichedPt5_TuneCP5_13p6TeV_pythia8",
     "xsec": 68.24,
-    "sumsign": 18567007.0,
-    "sumW": 18567007.559188604,
-    "nmc": 18567007.0,
+    "sumsign": -1,
+    "sumW": -1,
+    "nmc": -1,
     "path": [
         "/gv0/DATA/SKNano/Run3NanoAODv13p1/2022/QCD_PT-470to600_MuEnrichedPt5_TuneCP5_13p6TeV_pythia8/250617_130132/0000/NANOAOD_1.root",
         "/gv0/DATA/SKNano/Run3NanoAODv13p1/2022/QCD_PT-470to600_MuEnrichedPt5_TuneCP5_13p6TeV_pythia8/250617_130132/0000/NANOAOD_2.root",
