@@ -1,0 +1,12 @@
+{
+    "Skim_Higgs_Muon": {
+        "suffix": "Higgs",
+        "PD": "Muon",
+        "isMC": 0,
+        "periods": [
+            "G",
+            "F",
+            "E"
+        ]
+    }
+}

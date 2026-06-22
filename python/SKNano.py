@@ -183,6 +183,7 @@ def setParser():
     parser.add_argument('--memory', dest='Memory', default=2048, type=float)
     parser.add_argument('--ncpu', dest='ncpu', default=1, type=int) 
     parser.add_argument('--batchname', dest='BatchName', default="")
+    parser.add_argument('--tag', dest='Tag', default="", help="Suffix appended to the era output folder (e.g. --tag v2 -> .../<era>_v2). Useful to avoid overwriting/waiting on a previous job's output.")
     parser.add_argument('--skimming_mode', action='store_true', default=False, help="Enable this option when anlyzer is skimmer.")
     parser.add_argument('--no_exec', action='store_true', default=False, help="only produce working area, not submitting to the condor pool")
     
@@ -424,7 +425,8 @@ def makeHaddJobs(working_dir,argparser,sample):
     if len(userflags) > 0:
         AnalyzerName += f"/{'_'.join(userflags)}"
     era = working_dir.split('/')[-2]
-    hadd_target = os.path.join(SKNANO_OUTPUT,AnalyzerName,era,sample+'.root')
+    era_dir = era if argparser.Tag == "" else f"{era}_{argparser.Tag}"
+    hadd_target = os.path.join(SKNANO_OUTPUT,AnalyzerName,era_dir,sample+'.root')
     if not os.path.exists(os.path.dirname(hadd_target)):
         os.makedirs(os.path.dirname(hadd_target))
 

@@ -22,6 +22,8 @@
 #include "MLHelper.h"
 
 #include <memory>
+#include <string>
+#include <vector>
 
 class HiggsBDT : public AnalyzerCore {
 public:
@@ -52,10 +54,14 @@ public:
         float m4l_sr_max = 140.0;
     } cuts;
 
-    // The BDT (v5, Path 1 / SR-restricted) expects 23 features in the order
-    // defined in /data6/Users/snuintern2/BDT/src/features.py::FEATURES
-    // (also see bdt_v5_features.txt next to the .onnx).
-    static constexpr int N_FEAT = 23;
+    // Feature order is NOT hardcoded. It is read at run time from the
+    // <model_stem>_features.txt file written next to the .onnx by the BDT
+    // project's scripts/export_onnx.py. That file is the single source of
+    // truth (it mirrors /data6/Users/snuintern2/BDT/src/features.py::FEATURES).
+    // executeEventFromParameter computes every known variable into a name->value
+    // map and assembles the input tensor in this order, so changing the feature
+    // set in features.py needs only a re-export + redeploy, no C++ edit.
+    std::vector<std::string> featureNames;
 
     // Per-event work areas.
     RVec<Muon> AllMuons;

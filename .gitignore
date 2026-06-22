@@ -19,7 +19,7 @@ SKFlatAnalyzer
 HSNanoAnalyzer
 SKNanoOutput
 Run*NanoAOD*
-
+setup.sh
 #Temporary Added to my personal temp files
 DataCOPY/** 
 MCCOPY/**

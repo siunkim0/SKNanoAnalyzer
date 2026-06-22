@@ -1,0 +1,84 @@
+{
+    "Skim_2023_VHToNonbb": {
+        "suffix": "2023",
+        "PD": "VHToNonbb",
+        "isMC": 1
+    },
+    "Skim_2023_VBFHToZZTo4L": {
+        "suffix": "2023",
+        "PD": "VBFHToZZTo4L",
+        "isMC": 1
+    },
+    "Skim_2023_ggHToZZTo4L": {
+        "suffix": "2023",
+        "PD": "ggHToZZTo4L",
+        "isMC": 1
+    },
+    "Skim_2023_ZZ_pythia": {
+        "suffix": "2023",
+        "PD": "ZZ_pythia",
+        "isMC": 1
+    },
+    "Skim_2023_WZ_pythia": {
+        "suffix": "2023",
+        "PD": "WZ_pythia",
+        "isMC": 1
+    },
+    "Skim_2023_WW_pythia": {
+        "suffix": "2023",
+        "PD": "WW_pythia",
+        "isMC": 1
+    },
+    "Skim_2023_WJets": {
+        "suffix": "2023",
+        "PD": "WJets",
+        "isMC": 1
+    },
+    "Skim_2023_DoubleMuon": {
+        "suffix": "2023",
+        "PD": "DoubleMuon",
+        "isMC": 0,
+        "periods": [
+            "D",
+            "C",
+            "B",
+            "A"
+        ]
+    },
+    "Skim_2023_ZZTo4L_powheg": {
+        "suffix": "2023",
+        "PD": "ZZTo4L_powheg",
+        "isMC": 1
+    },
+    "Skim_2023_SingleMuon": {
+        "suffix": "2023",
+        "PD": "SingleMuon",
+        "isMC": 0,
+        "periods": [
+            "D",
+            "C",
+            "B",
+            "A"
+        ]
+    },
+    "Skim_2023_TTLJ_powheg": {
+        "suffix": "2023",
+        "PD": "TTLJ_powheg",
+        "isMC": 1
+    },
+    "Skim_2023_TTLL_powheg": {
+        "suffix": "2023",
+        "PD": "TTLL_powheg",
+        "isMC": 1
+    },
+    "Skim_2023_DYJets10to50": {
+        "suffix": "2023",
+        "PD": "DYJets10to50",
+        "isMC": 1
+    },
+    "Skim_2023_DYJets": {
+        "suffix": "2023",
+        "PD": "DYJets",
+        "isMC": 1
+    }
+}

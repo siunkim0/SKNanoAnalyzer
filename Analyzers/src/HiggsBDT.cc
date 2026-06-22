@@ -6,6 +6,8 @@
 #include <cmath>
 #include <fstream>
 #include <iostream>
+#include <map>
+#include <string>
 
 // ---------------------------------------------------------------------------
 // Helicity-angle helpers — mirror src/features.py::add_helicity_angles in the
@@ -62,7 +64,7 @@ void HiggsBDT::initializeAnalyzer() {
         std::cerr << "[HiggsBDT] SKNANO_DATA env var not set; BDT inference disabled\n";
         return;
     }
-    bdtModelPath = TString(sknano_data) + "/" + DataEra + "/BDT/HZZ4mu/bdt_v5.onnx";
+    bdtModelPath = TString(sknano_data) + "/" + DataEra + "/BDT/HZZ4mu/bdt_v1_v1.onnx";
 
     std::ifstream probe(bdtModelPath.Data());
     if (!probe.good()) {
@@ -70,8 +72,36 @@ void HiggsBDT::initializeAnalyzer() {
                   << " — BDT inference disabled, selection-only mode\n";
         return;
     }
+    // Read the feature order exported alongside the model. This is the single
+    // source of truth shared with src/features.py::FEATURES — never hardcode it.
+    TString featListPath = bdtModelPath;
+    featListPath.ReplaceAll(".onnx", "_features.txt");
+    std::ifstream flist(featListPath.Data());
+    if (!flist.good()) {
+        std::cerr << "[HiggsBDT] feature list not found at " << featListPath
+                  << " — BDT inference disabled\n";
+        return;
+    }
+    featureNames.clear();
+    std::string line;
+    while (std::getline(flist, line)) {
+        // Trim trailing CR/space (handles CRLF and stray whitespace).
+        while (!line.empty() &&
+               (line.back() == '\r' || line.back() == ' ' || line.back() == '\t')) {
+            line.pop_back();
+        }
+        if (!line.empty()) featureNames.push_back(line);
+    }
+    if (featureNames.empty()) {
+        std::cerr << "[HiggsBDT] feature list " << featListPath
+                  << " is empty — BDT inference disabled\n";
+        return;
+    }
+
     bdt = std::make_unique<MLHelper>(bdtModelPath.Data(), MLHelper::ModelType::ONNX);
-    std::cout << "[HiggsBDT] loaded BDT model from " << bdtModelPath << std::endl;
+    std::cout << "[HiggsBDT] loaded BDT model from " << bdtModelPath
+              << " with " << featureNames.size() << " features from "
+              << featListPath << std::endl;
 }
 
 void HiggsBDT::executeEvent() {
@@ -158,32 +188,10 @@ void HiggsBDT::executeEventFromParameter() {
     if (m4l < cuts.m4l_min || m4l > cuts.m4l_max) return;
     FillHist(this_syst + "/CutFlow", 4, weight, 10, 0, 10);
 
-    // 6. Build the 23-feature vector in the SAME order as
-    //    /data6/Users/snuintern2/BDT/src/features.py::FEATURES
-    //    (also see bdt_v5_features.txt next to the .onnx). v5 is Path 1
-    //    (SR-restricted training) with the full 23-variable input set —
-    //    mass features are restored. This is the parity-critical part —
-    //    index errors here are silent.
-    FloatArray feats(N_FEAT);
-
-    // Mass (3)
-    feats[0] = static_cast<float>(m4l);
-    feats[1] = static_cast<float>(mZ1);
-    feats[2] = static_cast<float>(mZ2);
-    // 4l kinematics (2)
-    feats[3] = static_cast<float>(p4_H.Pt());
-    feats[4] = static_cast<float>(p4_H.Eta());
-    // Z kinematics (3)
-    feats[5] = static_cast<float>(p4_Z1.Pt());
-    feats[6] = static_cast<float>(p4_Z2.Pt());
-    feats[7] = static_cast<float>(p4_Z1.DeltaR(p4_Z2));
-    // pT-sorted muon pT (4)
-    for (int k = 0; k < 4; ++k) feats[8 + k]  = static_cast<float>(selectedMuons[k].Pt());
-    // pT-sorted muon eta (4)
-    for (int k = 0; k < 4; ++k) feats[12 + k] = static_cast<float>(selectedMuons[k].Eta());
-    // Ratios (2)
-    feats[16] = static_cast<float>(p4_Z1.Pt() / m4l);
-    feats[17] = static_cast<float>(p4_Z2.Pt() / m4l);
+    // 6. Compute every known variable, then assemble the input tensor in the
+    //    order given by featureNames (read from <model>_features.txt, which
+    //    mirrors src/features.py::FEATURES). No index bookkeeping here — adding
+    //    or reordering features in features.py needs no change to this code.
 
     // Helicity angles (5). Convention: ℓ⁻ in each Z is the reference.
     const Muon& mZ1a = selectedMuons[i1];
@@ -218,11 +226,48 @@ void HiggsBDT::executeEventFromParameter() {
     double Phi  = signedAngle(n_plane_Z1, n_plane_Z2, n_Z1_H);
     double Phi1 = signedAngle(n_plane_Z1, n_plane_sc, n_Z1_H);
 
-    feats[18] = static_cast<float>(cos_theta_star);
-    feats[19] = static_cast<float>(cos_theta1);
-    feats[20] = static_cast<float>(cos_theta2);
-    feats[21] = static_cast<float>(Phi);
-    feats[22] = static_cast<float>(Phi1);
+    // Named feature registry. Keys MUST match the column names in
+    // src/features.py (i.e. the strings in features.py::FEATURES). To add a new
+    // input variable: register it here once and add it to features.py — the run
+    // -time order then comes from the exported _features.txt automatically.
+    const std::map<std::string, float> featMap = {
+        {"m4l",            static_cast<float>(m4l)},
+        {"mZ1",            static_cast<float>(mZ1)},
+        {"mZ2",            static_cast<float>(mZ2)},
+        {"pt4l",           static_cast<float>(p4_H.Pt())},
+        {"eta4l",          static_cast<float>(p4_H.Eta())},
+        {"pt_Z1",          static_cast<float>(p4_Z1.Pt())},
+        {"pt_Z2",          static_cast<float>(p4_Z2.Pt())},
+        {"dR_Z1Z2",        static_cast<float>(p4_Z1.DeltaR(p4_Z2))},
+        {"pt_mu1",         static_cast<float>(selectedMuons[0].Pt())},
+        {"pt_mu2",         static_cast<float>(selectedMuons[1].Pt())},
+        {"pt_mu3",         static_cast<float>(selectedMuons[2].Pt())},
+        {"pt_mu4",         static_cast<float>(selectedMuons[3].Pt())},
+        {"eta_mu1",        static_cast<float>(selectedMuons[0].Eta())},
+        {"eta_mu2",        static_cast<float>(selectedMuons[1].Eta())},
+        {"eta_mu3",        static_cast<float>(selectedMuons[2].Eta())},
+        {"eta_mu4",        static_cast<float>(selectedMuons[3].Eta())},
+        {"pt_Z1_over_m4l", static_cast<float>(p4_Z1.Pt() / m4l)},
+        {"pt_Z2_over_m4l", static_cast<float>(p4_Z2.Pt() / m4l)},
+        {"cos_theta_star", static_cast<float>(cos_theta_star)},
+        {"cos_theta1",     static_cast<float>(cos_theta1)},
+        {"cos_theta2",     static_cast<float>(cos_theta2)},
+        {"Phi",            static_cast<float>(Phi)},
+        {"Phi1",           static_cast<float>(Phi1)},
+    };
+
+    // Assemble the input vector in the exact training order.
+    FloatArray feats(featureNames.size());
+    for (size_t k = 0; k < featureNames.size(); ++k) {
+        auto it = featMap.find(featureNames[k]);
+        if (it == featMap.end()) {
+            std::cerr << "[HiggsBDT] feature '" << featureNames[k]
+                      << "' from the feature list is not registered in "
+                      << "HiggsBDT.cc — add it to featMap\n";
+            return;
+        }
+        feats[k] = it->second;
+    }
 
     // 7. Selection-stage histograms (always filled, regardless of BDT availability).
     FillHist(this_syst + "/H_Mass",  m4l, weight, 125, 0., 250.);
@@ -241,7 +286,7 @@ void HiggsBDT::executeEventFromParameter() {
         { bdtInputName.Data(), feats }
     };
     std::unordered_map<std::string, IntArray> in_shape {
-        { bdtInputName.Data(), IntArray{1, N_FEAT} }
+        { bdtInputName.Data(), IntArray{1, static_cast<int>(featureNames.size())} }
     };
     auto out = bdt->Run_ONNX_Model(in, in_shape);
 
