@@ -64,7 +64,7 @@ void HiggsBDT::initializeAnalyzer() {
         std::cerr << "[HiggsBDT] SKNANO_DATA env var not set; BDT inference disabled\n";
         return;
     }
-    bdtModelPath = TString(sknano_data) + "/" + DataEra + "/BDT/HZZ4mu/bdt_v1_v1.onnx";
+    bdtModelPath = TString(sknano_data) + "/" + DataEra + "/BDT/HZZ4mu/bdt_v6_new.onnx";
 
     std::ifstream probe(bdtModelPath.Data());
     if (!probe.good()) {
