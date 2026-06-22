@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #This it the preliminary version of SKFlat.py
-#Using htcondor python binding and DAGMAN workflow manager
+#Using htcondor python binding and DAGMAN workflow manager.
 import os, shutil
 import warnings
 import argparse
