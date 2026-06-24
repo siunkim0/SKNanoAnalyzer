@@ -64,7 +64,21 @@ void HiggsBDT::initializeAnalyzer() {
         std::cerr << "[HiggsBDT] SKNANO_DATA env var not set; BDT inference disabled\n";
         return;
     }
-    bdtModelPath = TString(sknano_data) + "/" + DataEra + "/BDT/HZZ4mu/bdt_v6_new.onnx";
+    // Model is selectable at RUN TIME — no recompile needed. Pass
+    //   --userflags model=<stem>
+    // to SKNano.py (e.g. model=bdt_v5_new -> bdt_v5_new.onnx). The matching
+    // <stem>_features.txt next to it is picked up automatically below.
+    // Defaults to bdt_v6_new when no model flag is given.
+    TString modelStem = "bdt_v6_new";
+    for (const auto& f : Userflags) {
+        if (f.BeginsWith("model=")) {
+            modelStem = f;
+            modelStem.Remove(0, 6);   // strip the "model=" prefix
+        }
+    }
+    bdtModelPath = TString(sknano_data) + "/" + DataEra + "/BDT/HZZ4mu/" + modelStem + ".onnx";
+    std::cout << "[HiggsBDT] selected BDT model stem '" << modelStem
+              << "' (override with --userflags model=<stem>)" << std::endl;
 
     std::ifstream probe(bdtModelPath.Data());
     if (!probe.good()) {
@@ -135,12 +149,18 @@ void HiggsBDT::executeEventFromParameter() {
     if (!pass_trig) return;
     FillHist(this_syst + "/CutFlow", 1, weight, 10, 0, 10);
 
-    // 3. muon ID + iso, exactly 4
-    auto muons_tight = SelectMuons(AllMuons, "POGTight", cuts.muon_pt_other, cuts.muon_eta);
+    // 3. muon ID + iso + IP, exactly 4. Mirror src/skim.py::apply_muon_id
+    //    one-to-one: looseId, pt>5, |eta|<2.4, pfRelIso04<0.35, |dxy|<0.5,
+    //    |dz|<1.0, sip3d<4.0. "POGLoose" == Muon_looseId. dXY()/dZ()/SIP3D()
+    //    are inherited from Lepton.
+    auto muons_loose = SelectMuons(AllMuons, "POGLoose", cuts.muon_pt_other, cuts.muon_eta);
     RVec<Muon> selectedMuons;
-    // src/skim.py uses pfRelIso04_all < 0.35 (HZZ tight).
-    for (const auto& mu : muons_tight) {
-        if (mu.PfRelIso04() < cuts.muon_iso_max) selectedMuons.push_back(mu);
+    for (const auto& mu : muons_loose) {
+        if (mu.PfRelIso04()    >= cuts.muon_iso_max)   continue;
+        if (std::fabs(mu.dXY()) >= cuts.muon_dxy_max)  continue;
+        if (std::fabs(mu.dZ())  >= cuts.muon_dz_max)   continue;
+        if (mu.SIP3D()         >= cuts.muon_sip3d_max) continue;
+        selectedMuons.push_back(mu);
     }
     if (selectedMuons.size() != 4) return;
     sort(selectedMuons.begin(), selectedMuons.end(), PtComparing);
@@ -154,6 +174,21 @@ void HiggsBDT::executeEventFromParameter() {
     if (selectedMuons[0].Charge() + selectedMuons[1].Charge() +
         selectedMuons[2].Charge() + selectedMuons[3].Charge() != 0) return;
     FillHist(this_syst + "/CutFlow", 3, weight, 10, 0, 10);
+
+    // Muon RECO + ID/Iso scale factors. Must match the selected ID (POGLoose)
+    // and mirror Higgs.cc so the BDT and cut-based paths carry identical
+    // per-event weights for the comparison.
+    if (!IsDATA) {
+        for (const auto& mu : selectedMuons) {
+            weight *= myCorr->GetMuonRECOSF(mu);
+            if (mu.Pt() > 15.0) {
+                // Loose ID only — relIso<0.35 has no matching POG iso WP, so no
+                // iso SF. DEN_TrackerMuons since GetMuonRECOSF already covers the
+                // tracker-muon reco efficiency (genTracks would double-count it).
+                weight *= myCorr->GetMuonIDSF("NUM_LooseID_DEN_TrackerMuons", mu);
+            }
+        }
+    }
 
     // 5. Z1 = OS pair closest to mZ
     constexpr double mZ_PDG = 91.1876;

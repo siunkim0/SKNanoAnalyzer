@@ -112,10 +112,19 @@ void Higgs::executeEventFromParameter() {
     //Cutflow after trigger
     FillHist(this_syst + "/CutFlow", 2, weight, 10, 0, 10 );
 
-    auto muons_tight = SelectMuons(AllMuons,"POGTight", 4., 2.4);
-    auto muons_iso = SelectMuons(muons_tight,"POGPfIsoTight", 4., 2.4); 
+    // Match the BDT training skim (src/skim.py::apply_muon_id) and HiggsBDT.cc
+    // exactly: looseId, pt>5, |eta|<2.4, pfRelIso04<0.35, |dxy|<0.5, |dz|<1.0,
+    // sip3d<4.0. "POGLoose" == Muon_looseId; dXY()/dZ()/SIP3D() from Lepton.
+    auto muons_loose = SelectMuons(AllMuons, "POGLoose", cuts.muon_pt_other, cuts.muon_eta);
+    RVec<Muon> selectedMuons;
+    for (const auto& mu : muons_loose) {
+        if (mu.PfRelIso04() >= cuts.muon_iso_max)   continue;
+        if (fabs(mu.dXY())  >= cuts.muon_dxy_max)   continue;
+        if (fabs(mu.dZ())   >= cuts.muon_dz_max)    continue;
+        if (mu.SIP3D()      >= cuts.muon_sip3d_max) continue;
+        selectedMuons.push_back(mu);
+    }
     FillHist(this_syst + "/CutFlow", 3, weight, 10, 0, 10);
-    RVec<Muon> selectedMuons = muons_iso;
 
     if ( selectedMuons.size() != 4 ) return;
     sort(selectedMuons.begin(), selectedMuons.end(), PtComparing);
@@ -123,10 +132,10 @@ void Higgs::executeEventFromParameter() {
     //Cutflow after delete single muon events
     FillHist(this_syst + "/CutFlow", 4, weight , 10, 0 , 10 );
     // mass cut 주기 전 후 MET, Jet & Z delta R, delta Phi, pt
-    if ((selectedMuons[0].Pt() < cuts.muon_pt_lead)) return;
-    if ((selectedMuons[1].Pt() < cuts.muon_pt_sublead)) return;
-    if ((selectedMuons[2].Pt() < cuts.muon_pt_sub2lead)) return;
-    if ((selectedMuons[3].Pt() < cuts.muon_pt_sub3lead)) return;
+    if (selectedMuons[0].Pt() < cuts.muon_pt_lead)    return;
+    if (selectedMuons[1].Pt() < cuts.muon_pt_sublead) return;
+    if (selectedMuons[2].Pt() < cuts.muon_pt_other)   return;
+    if (selectedMuons[3].Pt() < cuts.muon_pt_other)   return;
     
     //Cutflow after leading and subleading pt cuts
     FillHist(this_syst + "/CutFlow", 5, weight , 10, 0 , 10 );
@@ -203,16 +212,19 @@ void Higgs::executeEventFromParameter() {
                 //weight *= myCorr->GetMuonIDSF("NUM_LoosePFIso_DEN_MediumID", mu);
 
                 // for 2023, 2022EE
-                weight *= myCorr->GetMuonIDSF("NUM_TightID_DEN_TrackerMuons", mu);
-                weight *= myCorr->GetMuonIDSF("NUM_TightPFIso_DEN_TightID", mu);
+                //weight *= myCorr->GetMuonIDSF("NUM_TightID_DEN_TrackerMuons", mu);
+                //weight *= myCorr->GetMuonIDSF("NUM_TightPFIso_DEN_TightID", mu);
 
                 // for 2017, 2018 Tight
                 //weight *= myCorr->GetMuonIDSF("NUM_TightID_DEN_TrackerMuons", mu);
                 //weight *= myCorr->GetMuonIDSF("NUM_TightRelIso_DEN_TightIDandIPCut", mu);
 
-                // for 2018 Loose
-                //weight *= myCorr->GetMuonIDSF("NUM_MediumID_DEN_TrackerMuons", mu);
-                //weight *= myCorr->GetMuonIDSF("NUM_LooseRelIso_DEN_MediumID", mu);
+                // for 2018 Loose — selection cuts on looseId only. The manual
+                // relIso<0.35 cut has no matching POG iso WP (LooseRelIso is
+                // ~0.25), so no iso SF is applied. DEN_TrackerMuons (not
+                // genTracks): GetMuonRECOSF already covers the tracker-muon reco
+                // efficiency, so genTracks would double-count it.
+                weight *= myCorr->GetMuonIDSF("NUM_LooseID_DEN_TrackerMuons", mu);
 
                 // weight *= myCorr->GetMuonIDSF("NUM_TightID_DEN_TrackerMuons", mu);
                 // weight *= myCorr->GetMuonIDSF("NUM_TightPFIso_DEN_TightID", mu);
@@ -289,6 +301,7 @@ void Higgs::executeEventFromParameter() {
     }
 */
     // 히스토그램 채우기
+    /*
     FillHist(this_syst + "/H_Mass", mass_4mu, weight, 125, 0., 250.);
     FillHist(this_syst + "/H_Pt", Hpt, weight, 50, 0., 200.);
     FillHist(this_syst + "/Z1_Mass", p4_Z1.M(), weight, 100, 0., 200.);
@@ -303,15 +316,15 @@ void Higgs::executeEventFromParameter() {
     FillHist(this_syst + "/Z1Muon2_Pt", Z1Muon2_pt, weight, 100, 0., 200.);
     FillHist(this_syst + "/Z2Muon1_Pt", Z2Muon1_pt, weight, 100, 0., 200.);
     FillHist(this_syst + "/Z2Muon2_Pt", Z2Muon2_pt, weight, 100, 0., 200.);
-
-    if (Z1_mass < 40.0 || Z1_mass > 120.0) return;
-    if (Z2_mass < 12.0 || Z2_mass > 100.0) return;
+    */
+    if (Z1_mass < cuts.mZ1_min || Z1_mass > cuts.mZ1_max) return;
+    if (Z2_mass < cuts.mZ2_min || Z2_mass > cuts.mZ2_max) return;
 
     FillHist(this_syst + "/H_Mass_cut", mass_4mu, weight, 125, 0., 250.);
     FillHist(this_syst + "/Z1_Muon_dR_cut", dR_muons_Z1, weight, 50, 0., 5.0);
     FillHist(this_syst + "/Z2_Muon_dR_cut", dR_muons_Z2, weight, 50, 0., 5.0);
 
-    if (mass_4mu < 70.0) return;
+    if (mass_4mu < cuts.m4l_min || mass_4mu > cuts.m4l_max) return;
     FillHist(this_syst + "/H_Mass_final", mass_4mu, weight, 125, 0., 250.);
 } 
     
