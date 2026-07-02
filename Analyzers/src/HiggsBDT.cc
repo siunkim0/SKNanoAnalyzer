@@ -43,9 +43,16 @@ void HiggsBDT::initializeAnalyzer() {
     RunSyst = HasFlag("RunSyst");
 
     // Trigger OR — must match config/selection.yaml::triggers in the BDT project.
-    BDTTriggers = {
-        "HLT_IsoMu24"
-    };
+    // 2017 IsoMu24 is prescaled, so the unprescaled single-muon path is IsoMu27.
+    if (DataEra == "2017") {
+        BDTTriggers = {
+            "HLT_IsoMu27"
+        };
+    } else {
+        BDTTriggers = {
+            "HLT_IsoMu24"
+        };
+    }
 
     myCorr = new MyCorrection(DataEra, DataPeriod, IsDATA ? DataStream : MCSample, IsDATA);
 
@@ -309,6 +316,8 @@ void HiggsBDT::executeEventFromParameter() {
     FillHist(this_syst + "/Z1_Mass", mZ1, weight, 100, 0., 200.);
     FillHist(this_syst + "/Z2_Mass", mZ2, weight, 100, 0., 200.);
     FillHist(this_syst + "/H_Pt",    p4_H.Pt(), weight, 50, 0., 200.);
+    FillHist(this_syst + "/pt_Z1_over_m4l", p4_Z1.Pt() / m4l, weight, 50, 0., 2.);
+    FillHist(this_syst + "/pt_Z2_over_m4l", p4_Z2.Pt() / m4l, weight, 50, 0., 2.);
 
     // Path-1: only score events inside the training SR. v5 never saw
     // m4l outside [105,140]; scoring there is extrapolation noise.

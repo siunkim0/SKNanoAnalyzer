@@ -28,6 +28,12 @@ void Higgs::initializeAnalyzer() {
     } else if (DataEra == "2024") {
 	    IsoMuTriggerName = "HLT_IsoMu24";
         TriggerSafePtCut = 26.;	  
+    } else if (DataEra == "2016preVFP" || DataEra == "2016postVFP") {
+        IsoMuTriggerName = "HLT_IsoMu24";
+        TriggerSafePtCut = 26.;
+    } else if (DataEra == "2017") {
+        IsoMuTriggerName = "HLT_IsoMu27";
+        TriggerSafePtCut = 29.;
     } else if (DataEra == "2018") {  // <--- DoubleMuon Trigger
         IsoMuTriggerName = "HLT_IsoMu24";
         TriggerSafePtCut = 26.;
@@ -120,7 +126,7 @@ void Higgs::executeEventFromParameter() {
     for (const auto& mu : muons_loose) {
         if (mu.PfRelIso04() >= cuts.muon_iso_max)   continue;
         if (fabs(mu.dXY())  >= cuts.muon_dxy_max)   continue;
-        if (fabs(mu.dZ())   >= cuts.muon_dz_max)    continue;
+        if (fabs(mu.dZ()) >= cuts.muon_dz_max)    continue;
         if (mu.SIP3D()      >= cuts.muon_sip3d_max) continue;
         selectedMuons.push_back(mu);
     }
@@ -323,6 +329,8 @@ void Higgs::executeEventFromParameter() {
     FillHist(this_syst + "/H_Mass_cut", mass_4mu, weight, 125, 0., 250.);
     FillHist(this_syst + "/Z1_Muon_dR_cut", dR_muons_Z1, weight, 50, 0., 5.0);
     FillHist(this_syst + "/Z2_Muon_dR_cut", dR_muons_Z2, weight, 50, 0., 5.0);
+    FillHist(this_syst + "/pt_Z1_over_m4l", Z1_pt / mass_4mu, weight, 50, 0., 2.);
+    FillHist(this_syst + "/pt_Z2_over_m4l", Z2_pt / mass_4mu, weight, 50, 0., 2.);
 
     if (mass_4mu < cuts.m4l_min || mass_4mu > cuts.m4l_max) return;
     FillHist(this_syst + "/H_Mass_final", mass_4mu, weight, 125, 0., 250.);
