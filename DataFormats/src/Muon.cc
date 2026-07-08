@@ -179,7 +179,7 @@ bool Muon::Pass_HcToWATight() const {
     if (! isPOGMediumId()) return false;
     if (! (fabs(dZ()) < 0.1)) return false;
     if (! (SIP3D() < 3.)) return false;
-    if (! (TkRelIso() < 0.4*Pt())) return false;
+    if (! (TkRelIso() < 0.4)) return false;
     if (! (MiniPFRelIso() < 0.1)) return false;
     return true;
 }
@@ -188,7 +188,7 @@ bool Muon::Pass_HcToWALoose() const {
     if (! isPOGMediumId()) return false;
     if (! (fabs(dZ()) < 0.1)) return false;
     if (! (SIP3D() < 5.)) return false;
-    if (! (TkRelIso() < 0.4*Pt())) return false;
+    if (! (TkRelIso() < 0.4)) return false;
     if (! (MiniPFRelIso() < 0.6)) return false;
     return true;
 }
