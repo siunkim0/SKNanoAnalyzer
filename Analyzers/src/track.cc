@@ -47,6 +47,11 @@ void track::executeEvent() {
     //==== (v6) offline muon impact parameter — selection 없음 (QCD MuEnriched 스터디용)
     //==== (v7) + muon 소속 jet flavour별 분해 (NoSelFlav/): IP + iso + MT + MET
     Particle METv = ev.GetMETVector(Event::MET_Type::PUPPI);
+
+    //==== (v12) undef 트레이스용 gen 컬렉션 (MC 전용, 루프 밖에서 1회)
+    RVec<Gen> gens;
+    if (!IsDATA) gens = GetAllGens();
+
     for (const auto &mu : rawMuons) {
         FillHist("NoSel/Muon_Pt",     mu.Pt(),     weight, 200,  0.,  200.);
         FillHist("NoSel/Muon_Eta",    mu.Eta(),    weight,  50, -2.5,   2.5);
@@ -74,25 +79,14 @@ void track::executeEvent() {
             return "_undef";
         };
 
-        //---- muon 소속 jet: JetIdx 우선, 없으면 ΔR<0.4 최근접 jet fallback (v8)
-        //     JetIdx = NanoAOD 원본 jet index; GetAllJets/SmearJets 모두 순서 보존 확인됨
-        int jidx = mu.JetIdx();
-        if (jidx < 0 || jidx >= (int)rawJets.size()) {
-            jidx = -1;
-            float drmin = 0.4;
+        //---- (v12) 진짜 매칭 = NanoAOD PF 연관: Muon_jetIdx ↔ Jet::OriginalIndex
+        //     (muon이 실제 그 jet의 constituent일 때만; 연관 없으면 _nojet =
+        //      소속 jet이 15 GeV 저장 임계 미만이라 NanoAOD에 없는 경우)
+        int jidx = -1;
+        if (mu.JetIdx() >= 0) {
             for (int ij = 0; ij < (int)rawJets.size(); ij++) {
-                float dr = mu.DeltaR(rawJets[ij]);
-                if (dr < drmin) { drmin = dr; jidx = ij; }
+                if (rawJets[ij].OriginalIndex() == mu.JetIdx()) { jidx = ij; break; }
             }
-        }
-
-        //---- (v9) 2nd-nearest jet: muon 기준 ΔR 정렬 2번째 (1번째 = 소속 jet, ΔR 제한 없음)
-        int j1 = -1, j2 = -1;
-        float dr1 = 1e9, dr2 = 1e9;
-        for (int ij = 0; ij < (int)rawJets.size(); ij++) {
-            float dr = mu.DeltaR(rawJets[ij]);
-            if      (dr < dr1) { dr2 = dr1; j2 = j1; dr1 = dr; j1 = ij; }
-            else if (dr < dr2) { dr2 = dr;  j2 = ij; }
         }
 
         //---- (v8) FR 파라미터화 변수: near-jet pT, cone-corrected pT (fake README 컨벤션)
@@ -116,21 +110,82 @@ void track::executeEvent() {
             FillHist(pf + "ConePt"   + cat, conePt,            weight, 200,  0.,  400.);
         };
 
-        //---- 소속(=최근접) jet flavour 기준 (v7/v8)
+        //---- PF 연관 jet flavour 기준으로 전 변수 fill
         TString cat = flavCat(jidx);
-        fillMuVars("NoSelFlav/Muon_", cat);
-        if (jidx >= 0)
-            FillHist("NoSelFlav/Muon_NearJetPt" + cat, rawJets[jidx].Pt(), weight, 100, 0., 1000.);
+        fillMuVars("NoSelFlavIdx/Muon_", cat);
+        if (jidx >= 0) {
+            const Jet &mj = rawJets[jidx];
+            FillHist("NoSelFlavIdx/Muon_MatchedJetPt" + cat, mj.Pt(),          weight, 100, 0., 1000.);
+            FillHist("NoSelFlavIdx/Muon_MatchedJetDR" + cat, mu.DeltaR(mj),    weight, 100, 0.,   10.);
 
-        //---- 2nd-nearest jet flavour 기준 (v9): jet 2개 미만이면 _nojet
-        TString cat2 = flavCat(j2);
-        fillMuVars("NoSelFlav2nd/Muon_", cat2);
-        if (j2 >= 0) {
-            FillHist("NoSelFlav2nd/Muon_SecondJetPt" + cat2, rawJets[j2].Pt(), weight, 100, 0., 1000.);
-            FillHist("NoSelFlav2nd/Muon_SecondJetDR" + cat2, dr2,              weight, 100, 0.,   10.);
+            //---- (v13) 소속 jet의 track 다중도 (total/charged/neutral) — QCD vs TTJJ 비교용
+            //     charged/neutral branch는 Run3(2022+) NanoAODv12+에서 정상 fill
+            const int   nTot = mj.nConstituents();
+            const int   nCh  = mj.chMultiplicity();
+            const int   nNe  = mj.neMultiplicity();
+            const float mjpt = mj.Pt();
+            auto fillTrk = [&](const TString &suf) {
+                FillHist("NoSelFlavIdx/Muon_MatchedJetNConst" + suf, nTot, weight, 100, 0., 100.);
+                FillHist("NoSelFlavIdx/Muon_MatchedJetChMult" + suf, nCh,  weight, 100, 0., 100.);
+                FillHist("NoSelFlavIdx/Muon_MatchedJetNeMult" + suf, nNe,  weight, 100, 0., 100.);
+                //---- (v13) ⟨N⟩ vs jet pT 프로파일용 2D (v6 profile_flavour 스타일)
+                FillHist("NoSelFlavIdx/Muon_MatchedJetNConst_vs_Pt" + suf, mjpt, nTot, weight, 300, 0., 3000., 100, 0., 100.);
+                FillHist("NoSelFlavIdx/Muon_MatchedJetChMult_vs_Pt" + suf, mjpt, nCh,  weight, 300, 0., 3000., 100, 0., 100.);
+                FillHist("NoSelFlavIdx/Muon_MatchedJetNeMult_vs_Pt" + suf, mjpt, nNe,  weight, 300, 0., 3000., 100, 0., 100.);
+            };
+            fillTrk("");     // inclusive
+            fillTrk(cat);    // flavour split
+        }
+
+        //---- (v12) undef 트레이스: 어떤 flavour 코드/pdgId가 fall-through 되는지
+        if (cat == "_undef") {
+            //-- 소속 jet의 raw flavour 코드 (flavCat 어느 case에도 안 걸린 값)
+            if (jidx >= 0) {
+                FillHist("NoSelFlavIdx/Undef_JetPartonFlav", rawJets[jidx].partonFlavour(), weight, 101, -50.5, 50.5);
+                FillHist("NoSelFlavIdx/Undef_JetHadronFlav", rawJets[jidx].hadronFlavour(), weight,  11,  -0.5, 10.5);
+            }
+            //-- muon 자체의 gen 기원: NanoAOD genPartFlav 요약 (0=nomatch,1=prompt,3=light,4=c,5=b,15=tau)
+            FillHist("NoSelFlavIdx/Undef_MuonGenPartFlav", (int)mu.GenPartFlav(), weight, 16, -0.5, 15.5);
+            //-- muon gen-link(Muon_genPartIdx)으로 실제 pdgId 해석 (|PID|, 하드론이면 큰 값)
+            int gPID = 0;
+            short gIdx = mu.GenPartIdx();
+            if (gIdx >= 0) {
+                for (const auto &g : gens) {
+                    if (g.Index() == gIdx) { gPID = g.PID(); break; }
+                }
+            }
+            FillHist("NoSelFlavIdx/Undef_MuonGenPID", std::abs(gPID), weight, 1000, 0., 1000.);
         }
     }
 
+    //==== (v14) raw jet (무선택) track 다중도 vs pT — TTLJ 스터디 (MC 전용, flavour truth)
+    //     muon-매칭과 무관하게 GetAllJets() 전체를 flavour별로 (b/c=hadronFlavour, u/d/s/g=partonFlavour)
+    if (!IsDATA) {
+        for (const auto &j : rawJets) {
+            int hf  = j.hadronFlavour();
+            int apf = std::abs(j.partonFlavour());
+            TString fcat = "_undef";
+            if      (hf == 5)   fcat = "_b";
+            else if (hf == 4)   fcat = "_c";
+            else if (apf == 2)  fcat = "_u";
+            else if (apf == 1)  fcat = "_d";
+            else if (apf == 3)  fcat = "_s";
+            else if (apf == 21) fcat = "_g";
+            const float jpt = j.Pt();
+            const int   nT  = j.nConstituents();
+            const int   nC  = j.chMultiplicity();
+            const int   nN  = j.neMultiplicity();
+            auto fillRaw = [&](const TString &suf) {
+                FillHist("RawJet/NConst_vs_Pt" + suf, jpt, nT, weight, 300, 0., 3000., 100, 0., 100.);
+                FillHist("RawJet/ChMult_vs_Pt" + suf, jpt, nC, weight, 300, 0., 3000., 100, 0., 100.);
+                FillHist("RawJet/NeMult_vs_Pt" + suf, jpt, nN, weight, 300, 0., 3000., 100, 0., 100.);
+            };
+            fillRaw("");      // inclusive
+            fillRaw(fcat);    // flavour split
+        }
+    }
+}
+/*
     FillHist(prefix + "CutFlow", 0.5, weight, 10, 0., 10.);  // 0: all events
 
     //==== noise (MET) filter
@@ -195,3 +250,5 @@ void track::executeEvent() {
         }
     }
 }
+
+        */
