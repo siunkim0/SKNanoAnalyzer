@@ -63,6 +63,7 @@ void track::executeEvent() {
         FillHist("NoSel/Muon_SIP3D",  mu.SIP3D(),  weight, 200,  0.,   50.);
 
         if (IsDATA) continue;   // flavour truth는 MC 전용
+        if (mu.GenPartFlav() == 1) continue;  // 1 = prompt (W/Z→μ)
 
         //---- flavour 카테고리 (유저 정의: b/c=hadronFlavour, u/d/s/g=partonFlavour)
         auto flavCat = [&](int idx) -> TString {
