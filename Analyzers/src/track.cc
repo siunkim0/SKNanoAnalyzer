@@ -63,7 +63,29 @@ void track::executeEvent() {
         FillHist("NoSel/Muon_SIP3D",  mu.SIP3D(),  weight, 200,  0.,   50.);
 
         if (IsDATA) continue;   // flavour truth는 MC 전용
-        if (mu.GenPartFlav() == 1) continue;  // 1 = prompt (W/Z→μ)
+
+        //---- (v16) muon–jet 매칭 통계 (prompt veto '이전', 전 MC muon 대상):
+        //     0 = JetIdx 없음 (NanoAOD Muon_jetIdx < 0),
+        //     1 = JetIdx는 있으나 저장 jet과 OriginalIndex 미매칭 (소속 jet<15GeV → NanoAOD 미저장),
+        //     2 = 매칭 성공. weighted + raw(weight=1) 둘 다 기록.
+        {
+            int mstat;
+            if (mu.JetIdx() < 0) {
+                mstat = 0;
+            } else {
+                int jj = -1;
+                for (int ij = 0; ij < (int)rawJets.size(); ij++)
+                    if (rawJets[ij].OriginalIndex() == mu.JetIdx()) { jj = ij; break; }
+                mstat = (jj >= 0) ? 2 : 1;
+            }
+            FillHist("NoSelFlavIdx/MuonJetMatchStat",    mstat, weight, 3, -0.5, 2.5);
+            FillHist("NoSelFlavIdx/MuonJetMatchStatRaw", mstat, 1.f,    3, -0.5, 2.5);
+        }
+
+        //---- (v15) prompt muon 제거: undef/gluon이 정말 prompt(+uds/g mistag)인지 검증용.
+        //     GetLeptonType>0 = prompt(비-fake, 비-hadronic 기원: EW prompt/tau daughter/internal conv),
+        //     <=0 = fake(hadron 기원/external conv/미매칭). fake.cc·elecfake.cc와 동일 컨벤션.
+        if (GetLeptonType(mu, gens) > 0) continue;
 
         //---- flavour 카테고리 (유저 정의: b/c=hadronFlavour, u/d/s/g=partonFlavour)
         auto flavCat = [&](int idx) -> TString {
