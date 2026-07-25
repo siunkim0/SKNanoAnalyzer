@@ -1,0 +1,9 @@
+numpy
+pandas
+pyarrow
+uproot
+awkward
+xgboost>=2.0
+torch
+scikit-learn
+matplotlib

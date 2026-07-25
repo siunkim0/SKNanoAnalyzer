@@ -1,9 +1,13 @@
 #ifndef SKNanoLoader_h
 #define SKNanoLoader_h
 
+#include <algorithm>
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <functional>
+#include <memory>
+#include <vector>
 using namespace std;
 
 #include "TROOT.h"
@@ -11,10 +15,13 @@ using namespace std;
 #include "TChainElement.h"
 #include "TFile.h"
 #include "TTree.h"
+#include "TLeaf.h"
 #include "TString.h"
 #include "TRandom3.h"
+#include "TTreeReader.h"
+#include "TTreeReaderValue.h"
+#include "TTreeReaderArray.h"
 #include "ROOT/RVec.hxx"
-#include "ROOT/RDataFrame.hxx"
 #include <nlohmann/json.hpp>
 using namespace ROOT::VecOps;
 
@@ -30,6 +37,12 @@ public:
     long MaxEvent, NSkipEvent;
     int LogEvery;
     bool IsDATA;
+    // Skimmers clone fChain (fChain->CloneTree(0)) and rely on the legacy
+    // SetBranchAddress buffers being filled by fChain->GetEntry(); the
+    // TTreeReader path does not fill those buffers, so skimmers must keep
+    // the legacy reading mode. Auto-detected in Init() for "Skim*" analyzers,
+    // can also be set manually before Init().
+    bool SkimmingMode;
     TString DataStream;
     TString MCSample;
     TString Campaign;
@@ -42,6 +55,8 @@ public:
     RVec<TString> Userflags;
 
     virtual void Init();
+    virtual void InitTTreeReader();
+    virtual void InitLegacy();
     virtual void SetMaxLeafSize();
     virtual void Loop();
     virtual void executeEvent(){};
@@ -178,6 +193,13 @@ public:
     RVec<Int_t> GenVisTau_charge;
     RVec<Int_t> GenVisTau_genPartIdxMother;
     RVec<Int_t> GenVisTau_status;
+    // NanoAODv13 stores these with narrower integer types than the members above;
+    // SetBranchAddress cannot convert types, so in the legacy (SkimmingMode) path
+    // Run3 reads them into these raw buffers and widens per event in Loop().
+    // The TTreeReader path reads the on-file type directly and does not use them.
+    RVec<Short_t> Buf_GenVisTau_charge;
+    RVec<Short_t> Buf_GenVisTau_genPartIdxMother;
+    RVec<UChar_t> Buf_GenVisTau_status;
 
     // GenVtx -> Need Update
 
@@ -217,6 +239,7 @@ public:
     RVec<UChar_t> Muon_highPtId;
     RVec<Float_t> Muon_ip3d;
     RVec<Int_t> Muon_nTrackerLayers;
+    RVec<UChar_t> Buf_Muon_nTrackerLayers; // UChar_t on file in NanoAODv13; widened in Loop() (legacy path only)
     RVec<Bool_t> Muon_isGlobal;
     RVec<Bool_t> Muon_isStandalone;
     RVec<Bool_t> Muon_isTracker;
@@ -408,6 +431,8 @@ public:
     RVec<Short_t> Jet_svIdx2;
     RVec<UInt_t> Jet_chMultiplicity;
     RVec<UInt_t> Jet_neMultiplicity;
+    RVec<UChar_t> Buf_Jet_chMultiplicity; // UChar_t on file in NanoAODv13; widened in Loop() (legacy path only)
+    RVec<UChar_t> Buf_Jet_neMultiplicity; // UChar_t on file in NanoAODv13; widened in Loop() (legacy path only)
     //Run2
     RVec<Float_t> Jet_bRegCorr;
     RVec<Float_t> Jet_bRegRes;
@@ -505,6 +530,15 @@ public:
     RVec<Float_t> FatJet_particleNet_massCorr;
     RVec<Short_t> FatJet_subJetIdx1;
     RVec<Short_t> FatJet_subJetIdx2;
+    RVec<Float_t> FatJet_n2b1;
+    RVec<Float_t> FatJet_n3b1;
+    RVec<Short_t> FatJet_chMultiplicity;
+    RVec<Short_t> FatJet_neMultiplicity;
+    RVec<Float_t> FatJet_chHEF;
+    RVec<Float_t> FatJet_neHEF;
+    RVec<Float_t> FatJet_chEmEF;
+    RVec<Float_t> FatJet_neEmEF;
+    RVec<Float_t> FatJet_muEF;
     // Run2
     // I'll pass deepTag scores
     // RVec<Float_t> FatJet_btagCSVV2;
@@ -540,6 +574,28 @@ public:
     RVec<Int_t> FatJet_subJetIdx1_RunII;
     RVec<Int_t> FatJet_subJetIdx2_RunII;
 
+    // SubJet (softdrop subjets of AK8; Run3 only)
+    Int_t nSubJet = 0;
+    UInt_t nSubJet_RunII = 0;
+    RVec<Float_t> SubJet_pt;
+    RVec<Float_t> SubJet_eta;
+    RVec<Float_t> SubJet_phi;
+    RVec<Float_t> SubJet_mass;
+    RVec<Float_t> SubJet_btagDeepB;
+
+    // SV (secondary vertices from IVF; Run3 only)
+    Int_t nSV = 0;
+    UInt_t nSV_RunII = 0;
+    RVec<Float_t> SV_pt;
+    RVec<Float_t> SV_eta;
+    RVec<Float_t> SV_phi;
+    RVec<Float_t> SV_mass;
+    RVec<Float_t> SV_dlenSig;
+    RVec<Float_t> SV_dxySig;
+    RVec<Float_t> SV_chi2;
+    RVec<Float_t> SV_pAngle;
+    RVec<UChar_t> SV_ntracks;
+
     // MET
     Float_t MET_pt;
     Float_t MET_phi;
@@ -574,6 +630,15 @@ public:
     RVec<UShort_t> TrigObj_id;
     RVec<Int_t> TrigObj_filterBits;
     std::map<TString, pair<Bool_t*,float>> TriggerMap;
+
+    // TTreeReader machinery (default reading mode).
+    // Each filler copies one branch proxy into the corresponding member above,
+    // so the member interface the analyzers use is unchanged.
+    // Scalar fillers run before the Run2 sync block in Loop(), array fillers
+    // after it (they use the synced nX counters for absent-branch zero-fill).
+    std::unique_ptr<TTreeReader> fReader; //!
+    std::vector<std::function<void()>> fScalarFillers; //!
+    std::vector<std::function<void()>> fArrayFillers; //!
 };
 
 #endif

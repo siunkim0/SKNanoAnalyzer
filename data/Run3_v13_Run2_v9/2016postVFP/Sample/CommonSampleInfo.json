@@ -502,7 +502,8 @@
     "QCD_Pt-120to170_EMEnriched": {
         "isMC": 1,
         "PD": "QCD_Pt-120to170_EMEnriched_TuneCP5_13TeV-pythia8",
-        "xsec": 21070,
+        "xsec": 66590,
+        "ref": "XSDB",
         "nmc": 5007347.0,
         "sumsign": 5007347.0,
         "sumW": 5007404.355621338
@@ -858,5 +859,18 @@
         "nmc": 272586.0,
         "sumsign": 272586.0,
         "sumW": 0.011569977142922738
+    },
+    "DoubleEG": {
+        "isMC": 0,
+        "periods": [
+            "F",
+            "G",
+            "H"
+        ],
+        "NEvents": [
+            4321960.0,
+            76538906.0,
+            82569064.0
+        ]
     }
 }

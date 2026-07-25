@@ -986,10 +986,11 @@ RVec<Jet> AnalyzerCore::GetAllJets() {
                    Jet_btagDeepFlavQG[i],
                    -999., -999., -999., -999.,
                    -999., -999., -999., -999., -999.};
-            jet.SetMultiplicities(Jet_nConstituents[i], 
-                                  Jet_nElectrons_RunII[i], 
+            jet.SetMultiplicities(Jet_nConstituents[i],
+                                  Jet_nElectrons_RunII[i],
                                   Jet_nMuons_RunII[i],
                                   0);
+            jet.SetQGL(Jet_qgl[i]);   // quark-gluon likelihood (Run 2 only)
             if(!IsDATA){
                 jet.SetMatchingIndices(Jet_electronIdx1_RunII[i], 
                                        Jet_electronIdx2_RunII[i], 
@@ -1215,6 +1216,9 @@ RVec<FatJet> AnalyzerCore::GetAllFatJets() {
 
             fatjet.SetJetID(FatJet_jetId[i]);
             if(!IsDATA) fatjet.SetGenMatchIDs(FatJet_genJetAK8Idx[i], FatJet_subJetIdx1[i], FatJet_subJetIdx2[i]);
+            fatjet.SetECFRatios(FatJet_n2b1[i], FatJet_n3b1[i]);
+            fatjet.SetMultiplicities(FatJet_chMultiplicity[i], FatJet_neMultiplicity[i]);
+            fatjet.SetEnergyFractions(FatJet_chHEF[i], FatJet_neHEF[i], FatJet_chEmEF[i], FatJet_neEmEF[i], FatJet_muEF[i]);
         }
         else if(Run == 2){
             pnet_m = {FatJet_particleNet_H4qvsQCD[i], FatJet_particleNet_HccvsQCD[i],

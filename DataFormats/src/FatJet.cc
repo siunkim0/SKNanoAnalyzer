@@ -43,10 +43,22 @@ FatJet::FatJet() : Particle() {
     j_particleNet_XttVsQCD  = -999.; // X->tau_h tau_h vs. QCD score: Xtt/(Xtt+QCD)
     j_particleNet_massCorr  = -999.; // ParticleNet mass regression, relative correction to JEC-corrected jet mass (no softdrop)
     // Subjettiness
-    j_tau1 = -999.; 
+    j_tau1 = -999.;
     j_tau2 = -999.;
     j_tau3 = -999.;
     j_tau4 = -999.;
+    // Energy correlation ratios (Run3 only)
+    j_n2b1 = -999.;
+    j_n3b1 = -999.;
+    // PUPPI-weighted multiplicities (Run3 only)
+    j_chMultiplicity = -999;
+    j_neMultiplicity = -999;
+    // Energy fractions (Run3 only)
+    j_chHEF  = -999.;
+    j_neHEF  = -999.;
+    j_chEmEF = -999.;
+    j_neEmEF = -999.;
+    j_muEF   = -999.;
 
 }
 

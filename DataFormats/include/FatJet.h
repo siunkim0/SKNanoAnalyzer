@@ -82,6 +82,33 @@ public:
     void SetSubjettiness(float tau1, float tau2, float tau3, float tau4) {
         j_tau1 = tau1; j_tau2 = tau2; j_tau3 = tau3; j_tau4 = tau4;
     };
+    inline float Tau1() const { return j_tau1; };
+    inline float Tau2() const { return j_tau2; };
+    inline float Tau3() const { return j_tau3; };
+    inline float Tau4() const { return j_tau4; };
+
+    inline float ParticleNetWithMass_WvsQCD() const { return j_particleNetWithMass_WvsQCD; };
+    inline float ParticleNetWithMass_TvsQCD() const { return j_particleNetWithMass_TvsQCD; };
+    inline float ParticleNet_XqqVsQCD() const { return j_particleNet_XqqVsQCD; };
+    inline float ParticleNet_XggVsQCD() const { return j_particleNet_XggVsQCD; };
+    inline float ParticleNet_MassCorr() const { return j_particleNet_massCorr; };
+
+    void SetECFRatios(float n2b1, float n3b1) { j_n2b1 = n2b1; j_n3b1 = n3b1; };
+    inline float N2b1() const { return j_n2b1; };
+    inline float N3b1() const { return j_n3b1; };
+
+    void SetMultiplicities(short chMult, short neMult) { j_chMultiplicity = chMult; j_neMultiplicity = neMult; };
+    inline short ChMultiplicity() const { return j_chMultiplicity; };
+    inline short NeMultiplicity() const { return j_neMultiplicity; };
+
+    void SetEnergyFractions(float chHEF, float neHEF, float chEmEF, float neEmEF, float muEF) {
+        j_chHEF = chHEF; j_neHEF = neHEF; j_chEmEF = chEmEF; j_neEmEF = neEmEF; j_muEF = muEF;
+    };
+    inline float ChHEF() const { return j_chHEF; };
+    inline float NeHEF() const { return j_neHEF; };
+    inline float ChEmEF() const { return j_chEmEF; };
+    inline float NeEmEF() const { return j_neEmEF; };
+    inline float MuEF() const { return j_muEF; };
 
     bool PassID(TString ID) const;
     // TODO  double GetTaggerResult(JetTagging::Tagger tg) const;
@@ -108,6 +135,9 @@ private:
     float j_particleNet_XbbVsQCD, j_particleNet_XccVsQCD, j_particleNet_XqqVsQCD, j_particleNet_XggVsQCD, j_particleNet_XteVsQCD;
     float j_particleNet_XtmVsQCD, j_particleNet_XttVsQCD, j_particleNet_massCorr;
     float j_tau1, j_tau2, j_tau3, j_tau4;
+    float j_n2b1, j_n3b1;
+    short j_chMultiplicity, j_neMultiplicity;
+    float j_chHEF, j_neHEF, j_chEmEF, j_neEmEF, j_muEF;
     ClassDef(FatJet, 1)
 
 };

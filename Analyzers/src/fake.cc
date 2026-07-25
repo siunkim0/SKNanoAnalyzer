@@ -286,7 +286,8 @@ void fake::measureFakeRate(const TriggerPath &path, float weight) {
         //==== per-parton-flavor 2D 히스토그램 (flavor-weighted FR 용, MC only)
         //==== source jet 을 gen / reco 두 방식으로 매칭해 b/c/s/d/u/g 로 분류
         //==== FR_flavor = tight_flavor / loose_flavor (offline)
-        if (!IsDATA && syst == "Central") {
+        //==== fake muon 만 (GetLeptonType<=0): TTLJ 등 prompt 오염 표본에서 필수
+        if (!IsDATA && syst == "Central" && GetLeptonType(mu, gens) <= 0) {
             const TString gf = GenJetFlavor(mu);
             const TString rf = RecoJetFlavor(mu);
             for (const auto &tag : tags) {

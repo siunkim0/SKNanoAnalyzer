@@ -1,0 +1,304 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2.4cm]{geometry}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+\graphicspath{{../ML/results/}{../Tools/Plots/v1/}}
+
+\newcommand{\pt}{\ensuremath{p_{\mathrm{T}}}}
+\newcommand{\msd}{\ensuremath{m_{\mathrm{SD}}}}
+\newcommand{\effs}{\ensuremath{\varepsilon_{S}}}
+\newcommand{\effb}{\ensuremath{\varepsilon_{B}}}
+\newcommand{\drqq}{\ensuremath{\Delta R(q,\bar{q}')}}
+
+\title{\bfseries A boosted hadronic-W tagger from CMS NanoAOD\\
+  high-level features}
+\author{Siun Kim\\[2pt]
+  \small Seoul National University, CMS group}
+\date{July 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+We study the reconstruction and identification of highly Lorentz-boosted
+hadronically decaying W bosons ($W\to q\bar{q}'$) in CMS Run~3 simulation
+(2022 + 2022EE, NanoAODv13). A generator-level and detector-level study
+establishes the boost scale at which the two decay quarks merge into a single
+jet: an AK8 jet captures the full decay above $\pt^{W}\!\approx\!220\,$GeV,
+and both quarks merge into one AK4 jet above $\approx 445\,$GeV, in agreement
+with the $\Delta R \approx 2m_W/\pt$ expectation. Building on the observation
+that merged-W jets carry higher charged-particle multiplicity than quark jets,
+we train two machine-learned taggers on jet-level high-level features
+available in standard NanoAOD (no particle-flow candidates): a gradient-boosted
+decision tree and a lightweight attention model (``ParT-lite'') operating on
+softdrop-subjet and secondary-vertex tokens. At 50\% signal efficiency the
+nominal taggers reject QCD jets $2.1\times$ better than the classic
+$\tau_{21}$+mass-window selection, closing most of the gap to the
+constituent-based ParticleNet ($1.8\times$ ahead). A mass-decorrelated
+ParT-lite variant matches the mass-shape neutrality of the stored
+mass-decorrelated ParticleNet XqqVsQCD discriminant while delivering
+$2.2\times$ its background rejection. The charged multiplicity is the
+second-most important input in all trained taggers, confirming the
+track-multiplicity hypothesis and mirroring the ATLAS three-variable
+($m$, $D_2$, $n_{\mathrm{trk}}$) tagger design.
+\end{abstract}
+
+\section{Introduction}
+
+At LHC energies, W bosons produced with transverse momentum well above their
+mass decay into quark pairs whose opening angle,
+\begin{equation}
+  \Delta R(q,\bar q') \;\approx\; \frac{2\,m_W}{\pt^{W}},
+  \label{eq:dr}
+\end{equation}
+shrinks below the radius of standard jet clustering algorithms: the two
+partons are reconstructed as a single ``merged'' jet. Identifying such jets
+--- W tagging --- is a cornerstone of searches with heavy resonances, of
+$t\bar{t}$ and diboson measurements, and of any analysis with hadronic W
+decays at high boost.
+
+Both LHC collaborations have converged on a common toolbox. CMS Run~2/3
+analyses use the softdrop-groomed jet mass \msd{} together with either
+cut-based substructure variables ($\tau_{21}=\tau_2/\tau_1$, or the
+mass-decorrelated $N_2^{\mathrm{DDT}}$ energy-correlation discriminant) or
+constituent-based deep networks (DeepAK8, ParticleNet, and most recently
+transformer models of the ParT family). ATLAS employs a three-variable tagger
+combining the combined jet mass, the $D_2$ energy-correlation ratio, and
+--- notably --- the \emph{charged-track multiplicity} $n_{\mathrm{trk}}$.
+Constituent-based networks are the most powerful, but they require
+per-particle inputs (PF candidates) that are \emph{not stored} in standard
+CMS NanoAOD; they are available only through stored inference scores
+evaluated centrally at production time.
+
+This note asks a practical question: \emph{how much of the modern tagging
+performance can be recovered from the jet-level high-level features (HLFs)
+that standard NanoAOD does store}, in a framework (SKNanoAnalyzer) without
+access to PF candidates? The study proceeds in two stages: a kinematic study
+of the merge transition (Sec.~\ref{sec:kine}), and the construction and
+evaluation of trained taggers (Secs.~\ref{sec:tagger}--\ref{sec:results}).
+
+\section{Samples, jets, and labels}
+\label{sec:samples}
+
+All samples are Run~3 (13.6\,TeV) central CMS Monte Carlo in NanoAODv13,
+eras 2022 and 2022EE:
+\begin{itemize}
+  \item \textbf{W-jet signal:} $t\bar t$ semileptonic (\texttt{TTtoLNu2Q},
+    powheg) and fully hadronic (\texttt{TTto4Q}, powheg), plus
+    \texttt{WW}/\texttt{WZ} (pythia) to populate the high-\pt{} tail.
+  \item \textbf{Background:} inclusive QCD multijet samples, \pt-binned from
+    170 to 3200\,GeV (nine bins per era).
+\end{itemize}
+AK8 (anti-$k_{\mathrm{T}}$, $R=0.8$) jets are selected with
+$\pt > 200\,$GeV, $|\eta| < 2.4$, tight jet identification, and
+$20 < \msd < 250\,$GeV. Jets are labeled with generator truth: a
+\emph{W jet} contains both quark daughters of a last-copy hadronic W within
+$\Delta R < 0.8$ of the jet axis and no additional hard-process b quark in
+the cone; jets that also contain the b from the same top decay
+($t \to bq\bar q'$ capture, $\langle\msd\rangle \approx 146\,$GeV) are kept
+as a separate class and excluded from both signal and background in training
+and evaluation. Background jets are taken exclusively from the QCD samples.
+The final dataset contains 4.36M W jets and 11.9M QCD jets, split
+60/20/20 into training, validation, and test sets.
+
+\section{The merge transition and the track-multiplicity observation}
+\label{sec:kine}
+
+Generator- and detector-level scans of the hadronic-W decay confirm the
+expectation of Eq.~\eqref{eq:dr} in full simulation
+(Table~\ref{tab:merge}). The AK8 capture threshold and the gen-level
+$\drqq < 0.8$ crossing agree within a few GeV, and the naive formula
+underestimates both thresholds by only $\sim$10\%.
+
+\begin{table}[htb]
+  \centering
+  \caption{Boost scale of the merge transition: gen-W \pt{} at which each
+    fraction crosses 50\% (TTLJ+WW+WZ combined, 2022+2022EE).}
+  \label{tab:merge}
+  \begin{tabular}{lcc}
+    \hline
+    quantity & 50\% at & naive $2m_W/\pt$ \\
+    \hline
+    $\drqq < 0.8$ (gen)            & $\sim$227\,GeV & 200\,GeV \\
+    AK8 jet captures both quarks   & $\sim$220\,GeV & 200\,GeV \\
+    two AK4 jets overlap ($\Delta R<0.8$) & $\sim$222\,GeV & --- \\
+    $\drqq < 0.4$ (gen)            & $\sim$462\,GeV & 400\,GeV \\
+    AK4 merged (both quarks, one jet) & $\sim$444\,GeV & 400\,GeV \\
+    \hline
+  \end{tabular}
+\end{table}
+
+The same study revealed the observable that motivates this tagger: at
+matched jet \pt{} (200--400\,GeV), merged-W jets carry a higher
+charged-particle multiplicity ($\langle N_{\mathrm{ch}}\rangle = 20.7$) than
+gluon jets (17.9), single-quark W jets (15.2), or light-quark jets (13.6).
+Charged multiplicity separates the two-prong W jet from \emph{quark} jets,
+while the (softdrop) mass separates it from \emph{gluon} jets --- the two
+handles are complementary, which is precisely the logic of the ATLAS
+$n_{\mathrm{trk}}$-based tagger.
+
+\section{Tagger construction}
+\label{sec:tagger}
+
+\paragraph{Inputs.} All inputs are per-jet quantities stored in NanoAODv13:
+kinematics and masses (\msd, ungroomed mass, ParticleNet-regressed mass);
+$N$-subjettiness ratios $\tau_{21},\tau_{32},\tau_{43}$; energy-correlation
+ratios $N_2^{\beta=1}, N_3^{\beta=1}$; the lepton-subjet fraction LSF$_3$;
+total/charged/neutral constituent multiplicities; charged/neutral
+hadronic and electromagnetic and muon energy fractions; the two softdrop
+subjets (four-momenta, b-tag scores, $\Delta R$, momentum sharing $z$); and
+secondary vertices within the jet cone (count, summed mass, maximum
+decay-length significance, summed track count, and the three most-displaced
+vertices individually).
+
+\paragraph{Models.} Two architectures are trained on identical data:
+\begin{enumerate}
+  \item \textbf{BDT}: XGBoost, 27 flat features, depth 6,
+    early-stopped on validation AUC.
+  \item \textbf{ParT-lite}: a 132k-parameter attention model inspired by the
+    Particle Transformer. The token set --- 2 softdrop subjets and up to 3
+    secondary vertices --- passes through three self-attention blocks;
+    a class token built from the jet-level HLF vector then attends to the
+    tokens (class-attention pooling) and feeds the classification head.
+    This transplants the ParT architecture onto the objects NanoAOD
+    actually provides.
+\end{enumerate}
+
+\paragraph{Training and decorrelation.} Both classes are reweighted flat in
+\pt{} during training so the spectrum cannot be learned. Each model is
+trained twice: a \emph{nominal} variant with all features, and a
+\emph{mass-decorrelated} (MD) variant with all jet-mass-scale features
+removed (\msd, masses, subjet masses, subjet $\Delta R$) and the QCD sample
+additionally reweighted flat in $(\pt,\msd)$, suppressing mass sculpting by
+construction.
+
+\paragraph{Benchmarks.} Four references from the same test set:
+$\tau_{21}$ alone; $\tau_{21}$ within a $65<\msd<105\,$GeV window;
+$N_2^{\mathrm{DDT}}$ (5\% quantile map in $(\rho,\pt)$, the CMS cut-based
+MD standard); and the stored constituent-based ParticleNet scores ---
+\texttt{WvsQCD} (nominal ceiling) and the mass-decorrelated
+\texttt{XqqVsQCD}.
+
+\section{Results}
+\label{sec:results}
+
+\begin{figure}[htb]
+  \centering
+  \includegraphics[width=0.66\textwidth]{roc_inclusive.png}
+  \caption{Background rejection ($1/\effb$) versus signal efficiency for all
+    taggers, AK8 \pt{} 200--1200\,GeV, test split.}
+  \label{fig:roc}
+\end{figure}
+
+\begin{table}[htb]
+  \centering
+  \caption{Inclusive background rejection at three signal-efficiency points,
+    and the QCD \msd{} sculpting (Jensen--Shannon divergence between passing
+    and inclusive QCD mass shapes) at $\effb = 5\%$.}
+  \label{tab:rej}
+  \begin{tabular}{lcccc}
+    \hline
+    tagger & rej.@$\effs{=}0.3$ & rej.@$\effs{=}0.5$ & rej.@$\effs{=}0.7$
+      & JSD@5\%\,\effb \\
+    \hline
+    ParticleNet WvsQCD (ceiling) & 299 & 86 & 30 & 0.38 \\
+    \textbf{ParT-lite (nominal)} & 136 & 48 & 19 & 0.50 \\
+    \textbf{BDT (nominal)}       & 134 & 46 & 18 & 0.50 \\
+    $\tau_{21}$ + mass window    & 68  & 23 & 9  & --- \\
+    $\tau_{21}$                  & 40  & 15 & 7  & --- \\
+    \textbf{BDT MD}              & 31  & 13 & 6  & 0.046 \\
+    \textbf{ParT-lite MD}        & 32  & 12 & 5.5 & \textbf{0.011} \\
+    $N_2^{\mathrm{DDT}}$(5\%)    & 17  & 7  & 3  & 0.001 \\
+    ParticleNet XqqVsQCD (MD)    & 15  & 5.4 & 2.5 & 0.010 \\
+    \hline
+  \end{tabular}
+\end{table}
+
+Figure~\ref{fig:roc} and Table~\ref{tab:rej} summarize the discrimination
+performance; Table~\ref{tab:wp} lists analysis-ready working points at fixed
+inclusive mistag rates.
+
+\paragraph{Nominal taggers.} Both trained HLF taggers reject QCD
+$2.1\times$ better than the classic $\tau_{21}$+mass-window selection at
+$\effs = 0.5$ (48 vs.\ 23). The remaining factor of 1.8 to ParticleNet is
+the irreducible price of not seeing jet constituents. ParT-lite and the BDT
+tie inclusively, but ParT-lite is ahead in \emph{every} \pt{} bin
+(e.g.\ 42 vs.\ 36 at 500--800\,GeV) --- the inclusive tie is a binning
+artifact of the steeply falling spectra.
+
+\paragraph{Mass decorrelation.} The MD ParT-lite reduces mass sculpting by a
+factor $\sim$45 relative to the nominal taggers (JSD 0.011 vs.\ 0.50 at 5\%
+mistag), statistically compatible with the stored MD ParticleNet XqqVsQCD
+(0.010), while providing $2.2\times$ its background rejection (12 vs.\ 5.4)
+and $1.7\times$ that of $N_2^{\mathrm{DDT}}$. Among our two MD models the
+attention architecture is clearly preferred: at equal rejection the BDT MD
+sculpts $\sim$4$\times$ more, and its signal efficiency degrades toward high
+\pt{} where ParT-lite MD holds flat (Table~\ref{tab:wp}).
+
+\paragraph{Feature importance.} In both BDT variants the charged
+multiplicity is the second-most important feature (16\% of total gain),
+behind only \msd{} (nominal) or $\tau_{32}$ (MD). The
+track-multiplicity hypothesis of Sec.~\ref{sec:kine} is therefore not only
+qualitatively confirmed but is quantitatively a leading source of
+discrimination --- reproducing, in CMS NanoAOD, the design logic of the
+ATLAS $(m, D_2, n_{\mathrm{trk}})$ tagger.
+
+\begin{table}[htb]
+  \centering
+  \caption{Working points at fixed inclusive QCD mistag rate: score
+    threshold, inclusive signal efficiency, and signal efficiency per AK8
+    \pt{} bin (GeV).}
+  \label{tab:wp}
+  \resizebox{\textwidth}{!}{\input{../ML/results/wp_table.tex}}
+\end{table}
+
+\begin{figure}[htb]
+  \centering
+  \includegraphics[width=0.49\textwidth]{sculpting.png}\hfill
+  \includegraphics[width=0.49\textwidth]{jsd_vs_effb.png}
+  \caption{Left: QCD \msd{} shape of jets passing each tagger at
+    $\effb = 5\%$, compared to the inclusive shape. Right: sculpting (JSD)
+    versus background efficiency. The nominal taggers carve out the W mass
+    peak; the MD variants leave the spectrum nearly unchanged.}
+  \label{fig:sculpt}
+\end{figure}
+
+\begin{figure}[htb]
+  \centering
+  \includegraphics[width=0.6\textwidth]{eff_vs_pt.png}
+  \caption{Signal efficiency versus AK8 jet \pt{} at the 1\%-mistag working
+    point for the nominal taggers and baselines.}
+  \label{fig:effpt}
+\end{figure}
+
+\section{Summary}
+
+Starting from a first-principles study of the W-boson merge transition
+($\pt^{W}\gtrsim 220\,$GeV for AK8, $\gtrsim 445\,$GeV for AK4), we built,
+trained, and characterized a family of boosted-W taggers using only
+high-level features stored in standard CMS NanoAOD. The trained taggers
+double the rejection of the classic $\tau_{21}$+mass selection; a
+lightweight attention model over subjet and secondary-vertex tokens matches
+a flat BDT inclusively and beats it in every \pt{} bin; and its
+mass-decorrelated variant achieves ParticleNet-XqqVsQCD-level mass
+neutrality at twice the rejection, making it a competitive analysis-ready
+discriminant where the stored MD scores are insufficient. The charged
+constituent multiplicity --- the original physics observation that
+motivated this work --- proved to be the second-strongest input overall.
+
+The natural next steps are: extension to the 2023(+BPix) eras; a
+data/simulation scale-factor measurement in a $t\bar t$-enriched single-lepton
+region; and, should PFNano samples become available, a true
+constituent-level Particle Transformer to close the remaining factor
+$\sim$1.8 to the ParticleNet ceiling.
+
+\vspace{1em}
+\noindent\small
+Code and results: \texttt{hi/wtag/} (analyzer: SKNanoAnalyzer
+\texttt{Wtag.cc}; ML pipeline: \texttt{hi/wtag/ML/}; plans and full result
+tables: \texttt{PLAN.md}, \texttt{PLAN\_v2.md}).
+
+\end{document}

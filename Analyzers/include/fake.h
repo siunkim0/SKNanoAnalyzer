@@ -3,13 +3,18 @@
 
 #include "AnalyzerCore.h"
 
-// Muon fake rate measurement with prescaled single muon triggers
-// (HLT_Mu8_TrkIsoVVL / HLT_Mu17_TrkIsoVVL), Run 2 2016.
+//==============================================================
+// Muon fake rate 측정 (Run 2 2016, prescaled single muon trigger)
+//
+// 방법: QCD-enriched 영역에서 loose muon 중 tight 를 통과하는 비율을 잰다
+//   FR(ptcorr, |eta|) = N(tight) / N(loose)
+//
 // Userflags:
-//   MeasFakeMu8  - run only the Mu8 path
-//   MeasFakeMu17 - run only the Mu17 path
-//   (no flag)    - run both paths
-//   RunSyst      - fill away-jet pT variations (30 / 60 GeV)
+//   MeasFakeMu8  - Mu8 트리거 경로만 측정
+//   MeasFakeMu17 - Mu17 트리거 경로만 측정
+//   (플래그 없음) - 두 경로 모두 측정
+//   away jet pT 변화 (30 / 60 GeV) 시스테마틱은 항상 채운다
+//==============================================================
 class fake : public AnalyzerCore {
 public:
     fake();
@@ -18,46 +23,80 @@ public:
     void initializeAnalyzer();
     void executeEvent();
 
-    // public: rootcling generates a dictionary for vector<fake::TriggerPath>
+    // rootcling 이 vector<fake::TriggerPath> dictionary 를 만들기 때문에 public 필요
     struct TriggerPath {
-        TString name;      // histogram prefix: Mu8, Mu17
-        TString trigger;   // HLT path name
-        float ptCut;       // offline muon pT cut
-        float ptCorrCut;   // cone-corrected pT region cut
+        TString name;      // 히스토그램 prefix: Mu8, Mu17
+        TString trigger;   // HLT 경로 이름
+        float ptCut;       // offline muon pT 컷
+        float ptCorrCut;   // cone-corrected pT 영역 컷
     };
 
-private:
     // Userflags
-    bool MeasFakeMu8, MeasFakeMu17, RunSyst;
+    bool MeasFakeMu8, MeasFakeMu17;
 
+    // 트리거 경로 / 시스테마틱 / binning
     vector<TriggerPath> paths;
-    RVec<TString> systs;   // Central (+ AwayJetPt30, AwayJetPt60 if RunSyst)
-    RVec<float> ptCorrBins, absEtaBins;
-    TString electronLooseID;
+    RVec<TString> systs;                 // Central + AwayJetPt30 + AwayJetPt60
+    RVec<float> ptCorrBins, absEtaBins;  // FR 2D 히스토그램 binning
 
-    // WP cuts from the analysis note (Run 2 loose / tight)
+    // Analysis cuts (analysis note 의 WP 표 + 측정영역 정의)
+    struct AnalysisCuts {
+        // muon 공통: POG medium ID + 아래 컷
+        float muon_pt_min    = 10.0;
+        float muon_eta_max   =  2.4;
+        float muon_dz_max    =  0.1;   // cm
+        float muon_tkiso_max =  0.4;   // rel. tracker iso R03 (trigger emulation)
+        // tight WP
+        float tight_sip3d_max   = 3.0;
+        float tight_miniiso_max = 0.1;
+        // loose WP (Run 2)
+        float loose_sip3d_max   = 5.0;
+        float loose_miniiso_max = 0.6;
+        // electron veto (공식 측정의 veto electron 과 동일: pT > 10)
+        float electron_pt_min  = 10.0;
+        float electron_eta_max =  2.5;
+        // jet
+        float jet_pt_min   = 25.0;
+        float jet_eta_max  =  2.4;   // 2016: 2.4, 그 외: 2.5 (initializeAnalyzer 에서 설정)
+        float jet_lep_dr   =  0.4;   // lepton 과 겹치는 jet 제거
+        float awayjet_pt   = 40.0;   // Central away jet pT 컷
+        float awayjet_dr   =  0.7;   // dR(mu, away jet)
+        // 측정 영역 (W/Z prompt 오염 억제)
+        float met_max = 25.0;
+        float mt_max  = 25.0;
+        // Z-enriched 영역 (MC normalization 용)
+        float z_mass    = 91.2;
+        float z_window  = 15.0;
+        float zjet_pt   = 40.0;
+    } cuts;
+
+    // 이벤트마다 executeEvent 에서 새로 채우는 physics objects
+    RVec<Muon> looseMuons, tightMuons;   // tight ⊂ loose
+    RVec<Electron> looseElectrons;
+    RVec<Jet> rawJets;                   // lepton cleaning 이전 (flavor 매칭용)
+    RVec<Jet> jets;
+    Particle METv;
+    RVec<Gen> gens;                      // prompt / fake 구분용 (MC only)
+    RVec<GenJet> genJets;                // pileup jet ID SF 용 (MC only)
+
+    // Helper functions
     bool PassMuonWP(const Muon &mu, const TString &wp) const;
-
-    void measureFakeRate(const TriggerPath &path,
-                         const RVec<Muon> &looseMuons,
-                         const RVec<Electron> &looseElectrons,
-                         const RVec<Jet> &jets,
-                         const Particle &METv,
-                         float weight,
-                         const RVec<Gen> &gens);
-    void fillZEnriched(const TriggerPath &path,
-                       const Event &ev,
-                       const RVec<Muon> &looseMuons,
-                       const RVec<Muon> &tightMuons,
-                       const RVec<Electron> &looseElectrons,
-                       const RVec<Jet> &jets,
-                       float weight,
-                       const RVec<Gen> &gens);
-    void fillMuonKinematics(const TString &prefix,
-                            const Muon &mu, float ptCorr,
-                            const Particle &METv, float MT,
-                            int nJets, float weight);
+    bool PassElectronVeto(const Electron &el) const;
+    bool PassVetoMapJet(const Jet &jet, const RVec<Muon> &muons) const;
+    void measureFakeRate(const TriggerPath &path, float weight);
+    void fillZEnriched(const TriggerPath &path, const Event &ev, float weight);
+    void fillMuonKinematics(const TString &prefix, const Muon &mu,
+                            float ptCorr, float MT, int nJets, float weight);
     TString LeptonTypeToString(int leptonType) const;
+
+    // fake muon 의 source jet parton flavor 분류 (MC only, flavor-weighted FR 용)
+    //   parton/hadron flavour -> {b,c,s,d,u,g,unmatched} 문자열
+    TString FlavorTag(int partonFlavour, int hadronFlavour) const;
+    //   muon 을 가장 가까운 (raw reco / gen) jet 에 dR<0.4 로 매칭해 flavor 반환
+    //   주의: 측정 jet 컬렉션(jets)은 lepton cleaning 으로 source jet 이 제거되므로
+    //         반드시 rawJets / genJets (cleaning 이전) 에 매칭한다
+    TString RecoJetFlavor(const Muon &mu) const;
+    TString GenJetFlavor(const Muon &mu) const;
 };
 
 #endif

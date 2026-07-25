@@ -28,7 +28,7 @@ export SKNANO_HOME=`pwd`
 export SKNANO_RUNLOG="/gv0/Users/$USER/SKNanoRunlog"
 export SKNANO_OUTPUT="/gv0/Users/$USER/SKNanoOutput"
 export TUTORIALRUN="/data6/Users/snuintern2/folder/SNU-CMS/Tutorials/SKNanoAnalyzer/Zmass"
-export SKNANO_HOME="/data6/Users/snuintern2/folder/sknano/new/SKNanoAnalyzer"
+export SKNANO_HOME="/data6/Users/snuintern2/wtag/SKNanoAnalyzer"
 export TUTORIALBASE="/data6/Users/${USER}/Tutorial"
 
 echo "@@@@ Working Directory: $SKNANO_HOME"

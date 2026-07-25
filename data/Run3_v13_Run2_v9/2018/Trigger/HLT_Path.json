@@ -633,7 +633,8 @@
         "lumi": 59827.879502925
     },
     "HLT_PFHT1050": {
-        "lumi": 59827.879502925
+        "lumi": 59827.879502925,
+        "active": true
     },
     "HLT_PFHT500_PFMET100_PFMHT100_IDTight": {
         "lumi": 59827.879502925
@@ -1423,19 +1424,22 @@
         "lumi": 59827.879502925
     },
     "HLT_PFHT330PT30_QuadPFJet_75_60_45_40_TriplePFBTagDeepCSV_4p5": {
-        "lumi": 59827.879502925
+        "lumi": 59827.879502925,
+        "active": true
     },
     "HLT_PFHT330PT30_QuadPFJet_75_60_45_40": {
         "lumi": 59827.879502925
     },
     "HLT_PFHT400_SixPFJet32_DoublePFBTagDeepCSV_2p94": {
-        "lumi": 59827.879502925
+        "lumi": 59827.879502925,
+        "active": true
     },
     "HLT_PFHT400_SixPFJet32": {
         "lumi": 59827.879502925
     },
     "HLT_PFHT450_SixPFJet36_PFBTagDeepCSV_1p59": {
-        "lumi": 59827.879502925
+        "lumi": 59827.879502925,
+        "active": true
     },
     "HLT_PFHT450_SixPFJet36": {
         "lumi": 59827.879502925
