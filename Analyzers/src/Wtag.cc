@@ -236,6 +236,82 @@ void Wtag::executeEvent() {
         }
         int label = mW ? (hasB ? 2 : 1) : 0;
 
+        //==== v2b: raw-branch shape comparison, merged W (label 1) vs QCD (label 0).
+        //     Same boundary as the ML dataset so the numbers stay comparable with v2;
+        //     label 2 (W+b/top) is a spectator and is not drawn.
+        //     Class is by label here, but the QCD class must be taken from the QCD
+        //     samples only at merge time — label 0 also exists in ttbar/diboson.
+        if (label != 2 &&
+            fj.Pt() > 200. && fj.Pt() < 1200. && fj.SDMass() > 20. && fj.SDMass() < 250.) {
+
+            const TString c = (label == 1) ? "Branch/W_" : "Branch/QCD_";
+            // scores: 200 bins over [-1,1] keeps the "undefined" sentinel visible
+            auto S = [&](const TString &n, float v) { FillHist(c + n, v, weight, 200, -1., 1.); };
+            auto F = [&](const TString &n, float v) { FillHist(c + n, v, weight, 100,  0., 1.); };
+            auto N = [&](const TString &n, float v, int hi) { FillHist(c + n, v, weight, hi, 0., (float)hi); };
+            auto M = [&](const TString &n, float v) { FillHist(c + n, v, weight, 120,  0., 300.); };
+
+            //-- kinematics / bulk
+            FillHist(c + "pt",   fj.Pt(),  weight, 100, 200., 1200.);
+            FillHist(c + "eta",  fj.Eta(), weight,  60,  -3.,    3.);
+            FillHist(c + "phi",  fj.Phi(), weight,  64, -3.2,  3.2);
+            FillHist(c + "area", fj.Area(), weight, 100, 0.,     4.);
+            M("mass",      fj.M());
+            M("msoftdrop", fj.SDMass());
+            M("mreg",      fj.ParticleNet_MassCorr() * fj.M());
+            FillHist(c + "masscorr", fj.ParticleNet_MassCorr(), weight, 100, 0., 2.);
+
+            //-- substructure
+            F("tau1", fj.Tau1());  F("tau2", fj.Tau2());
+            F("tau3", fj.Tau3());  F("tau4", fj.Tau4());
+            S("tau21", fj.Tau1() > 0. ? fj.Tau2() / fj.Tau1() : -1.f);
+            S("tau32", fj.Tau2() > 0. ? fj.Tau3() / fj.Tau2() : -1.f);
+            S("tau43", fj.Tau3() > 0. ? fj.Tau4() / fj.Tau3() : -1.f);
+            S("n2b1", fj.N2b1());   // -1 sentinel: defined only for raw pT > 250
+            S("n3b1", fj.N3b1());
+            S("lsf3", fj.LSF3());
+
+            //-- multiplicities & energy fractions
+            N("nconst", fj.NConstituents(), 150);
+            N("chmult", fj.ChMultiplicity(), 150);
+            N("nemult", fj.NeMultiplicity(), 150);
+            N("nbhad",  fj.NBHadrons(), 10);   // MC truth: QCD composition only
+            N("nchad",  fj.NCHadrons(), 10);
+            F("chhef",  fj.ChHEF());   F("nehef",  fj.NeHEF());
+            F("chemef", fj.ChEmEF());  F("neemef", fj.NeEmEF());
+            F("muef",   fj.MuEF());
+
+            //-- double-b / Hbb taggers (loader arrays: no getters in FatJet)
+            S("ddbvl",      FatJet_btagDDBvLV2[ifj]);
+            S("ddcvb",      FatJet_btagDDCvBV2[ifj]);
+            S("ddcvl",      FatJet_btagDDCvLV2[ifj]);
+            S("btag_deepb", FatJet_btagDeepB[ifj]);
+            S("btag_hbb",   FatJet_btagHbb[ifj]);
+
+            //-- ParticleNet. PNetM_ = with-mass, PNet_ = mass-decorrelated; the
+            //   two "QCD" sums collide without the prefix. Run-3-only arrays.
+            if (Run == 3) {
+                S("PNetM_h4qvsqcd", FatJet_particleNetWithMass_H4qvsQCD[ifj]);
+                S("PNetM_hbbvsqcd", FatJet_particleNetWithMass_HbbvsQCD[ifj]);
+                S("PNetM_hccvsqcd", FatJet_particleNetWithMass_HccvsQCD[ifj]);
+                S("PNetM_wvsqcd",   FatJet_particleNetWithMass_WvsQCD[ifj]);
+                S("PNetM_zvsqcd",   FatJet_particleNetWithMass_ZvsQCD[ifj]);
+                S("PNetM_tvsqcd",   FatJet_particleNetWithMass_TvsQCD[ifj]);
+                S("PNetM_qcd",      FatJet_particleNetWithMass_QCD[ifj]);
+                S("PNet_qcd",       FatJet_particleNet_QCD[ifj]);
+                S("PNet_qcd0hf",    FatJet_particleNet_QCD0HF[ifj]);
+                S("PNet_qcd1hf",    FatJet_particleNet_QCD1HF[ifj]);
+                S("PNet_qcd2hf",    FatJet_particleNet_QCD2HF[ifj]);
+                S("PNet_xbbvsqcd",  FatJet_particleNet_XbbVsQCD[ifj]);
+                S("PNet_xccvsqcd",  FatJet_particleNet_XccVsQCD[ifj]);
+                S("PNet_xqqvsqcd",  FatJet_particleNet_XqqVsQCD[ifj]);
+                S("PNet_xggvsqcd",  FatJet_particleNet_XggVsQCD[ifj]);
+                S("PNet_xtevsqcd",  FatJet_particleNet_XteVsQCD[ifj]);
+                S("PNet_xtmvsqcd",  FatJet_particleNet_XtmVsQCD[ifj]);
+                S("PNet_xttvsqcd",  FatJet_particleNet_XttVsQCD[ifj]);
+            }
+        }
+
         //---- softdrop subjets (loader arrays, indexed from the fatjet)
         float sj1_pt = -1., sj1_mass = -1., sj1_btag = -1.;
         float sj2_pt = -1., sj2_mass = -1., sj2_btag = -1.;
