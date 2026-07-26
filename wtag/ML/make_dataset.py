@@ -40,7 +40,11 @@ QCD_CAP = 800_000          # 18 sample-eras -> <= 14.4M background
 MASS_FEATURES = ["sdmass", "mass", "mreg", "sj1_mass", "sj2_mass", "sj_dr"]
 FEATURES = [
     "sdmass", "mass", "mreg",
-    "tau21", "tau32", "tau43",
+    # tau31/tau41 are the two best non-tagger variables measured in v2c
+    # (rejection 18.0 / 15.9 at eps_S=0.5, vs 14.4 for tau21). They are not
+    # reachable from the adjacent ratios: tau31 = tau21 * tau32 is a product,
+    # which a tree ensemble cannot form, and no raw tau_N is in this list.
+    "tau21", "tau32", "tau43", "tau31", "tau41",
     "n2b1", "n3b1", "lsf3",
     "nconst", "chmult", "nemult",
     "chhef", "nehef", "chemef", "neemef", "muef",
@@ -49,8 +53,13 @@ FEATURES = [
 ]
 TOKEN_COLS = ["sj1_pt", "sj2_pt"] + [
     f"sv{k}_{v}" for k in (1, 2, 3) for v in ("pt", "mass", "dlensig", "ntracks")]
+# Benchmarks, deliberately NOT features -- a model given these would just learn
+# to copy them. pnet_qcd/xcc/xbb are here so the *combined* mass-decorrelated
+# discriminant (Xqq+Xcc+Xbb)/(...+QCD) can be reconstructed: the stored ratios
+# are r = X/(X+QCD), so X = QCD*r/(1-r) needs the raw QCD probability.
 EXTRAS = ["pt", "eta", "weight", "label", "pnet_wvsqcd", "pnet_tvsqcd",
-          "pnet_xqqvsqcd", "pnet_xggvsqcd", "gen_wpt", "gen_drqq", "gen_hasb"]
+          "pnet_xqqvsqcd", "pnet_xggvsqcd", "pnet_qcd", "pnet_xccvsqcd",
+          "pnet_xbbvsqcd", "gen_wpt", "gen_drqq", "gen_hasb"]
 
 
 def skim():
@@ -80,7 +89,7 @@ def skim():
             for c in (FEATURES + TOKEN_COLS + EXTRAS):
                 if c == "weight":
                     continue
-                if c in ("tau21", "tau32", "tau43", "mreg"):
+                if c in ("tau21", "tau32", "tau43", "tau31", "tau41", "mreg"):
                     continue  # derived later
                 cols.push_back(c)
             for c in ("tau1", "tau2", "tau3", "tau4", "masscorr", "weight_c"):
@@ -123,11 +132,17 @@ def pack():
     # sanitize sentinels (N2/N3 defined only for raw pT>250; PNet uses -10)
     for c in ("n2b1", "n3b1", "lsf3"):
         data[c] = np.where(data[c] > -1.0, data[c], -1.0)
-    for c in ("pnet_wvsqcd", "pnet_tvsqcd", "pnet_xqqvsqcd", "pnet_xggvsqcd"):
+    # The vs-QCD ratios use -10 for "not evaluated"; fold that onto -1 so a
+    # single test (< 0) means undefined. pnet_qcd is a raw probability with no
+    # sentinel, so it is left alone -- clamping it would corrupt the X = QCD*r/(1-r)
+    # inversion that the combined MD benchmark depends on.
+    for c in ("pnet_wvsqcd", "pnet_tvsqcd", "pnet_xqqvsqcd", "pnet_xggvsqcd",
+              "pnet_xccvsqcd", "pnet_xbbvsqcd"):
         data[c] = np.where(data[c] >= 0.0, data[c], -1.0)
     # derived features
     data["mreg"] = data.masscorr * data.mass
-    for num, den, nm in ((2, 1, "tau21"), (3, 2, "tau32"), (4, 3, "tau43")):
+    for num, den, nm in ((2, 1, "tau21"), (3, 2, "tau32"), (4, 3, "tau43"),
+                         (3, 1, "tau31"), (4, 1, "tau41")):
         d = data[f"tau{den}"]
         data[nm] = np.where(d > 0, data[f"tau{num}"] / d, -1.0)
     # rare NaNs (a handful of jets with NaN subjet-btag / SV kinematics) -> sentinel

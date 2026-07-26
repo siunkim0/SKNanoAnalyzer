@@ -305,8 +305,18 @@ def plot_ak8():
 # The W class comes from the ttbar/diboson merge and the QCD class from the QCD
 # merge: `label == 0` also exists in the signal samples, and the ML dataset
 # deliberately takes the QCD class from the QCD samples only.
-BR_INDIR = os.environ.get('BR_INDIR', "/data6/Users/snuintern2/wtag/SKNanoAnalyzer/wtag/v2b")
-BR_OUT   = "/data6/Users/snuintern2/wtag/SKNanoAnalyzer/wtag/Tools/Plots/v2b/branches"
+BR_INDIR = os.environ.get('BR_INDIR', "/data6/Users/snuintern2/wtag/SKNanoAnalyzer/wtag/v2c")
+BR_OUT   = "/data6/Users/snuintern2/wtag/SKNanoAnalyzer/wtag/Tools/Plots/v2c/branches"
+
+# The analyzer fills the same variable list twice. `Branch/` keeps m_SD in
+# [20,250] -- the regime a deployed tagger runs in, and the v2 ML dataset
+# boundary; `BranchNoMSD/` drops the window. That window keeps 98% of merged W
+# but only 41% of QCD, so a ranking measured inside it is conditional on the
+# single strongest discriminant: msoftdrop is scored on a sample msoftdrop has
+# already purified. Neither set is "the" answer, so both get plotted and the
+# difference is reported explicitly.
+BR_SETS = (("Branch",      "with_msd", "m_{SD} #in [20,250] GeV"),
+           ("BranchNoMSD", "no_msd",   "no m_{SD} window"))
 
 # Full spelled-out names: an axis that says "charged particle multiplicity" is
 # readable by someone who has never seen the NanoAOD branch called chMultiplicity.
@@ -326,14 +336,21 @@ BR_LABELS = {
     "tau21": "N-subjettiness ratio #tau_{2}/#tau_{1} (2-prong)",
     "tau32": "N-subjettiness ratio #tau_{3}/#tau_{2} (3-prong)",
     "tau43": "N-subjettiness ratio #tau_{4}/#tau_{3} (4-prong)",
+    # skip-a-step ratios: built offline from the tree, not by the analyzer
+    "tau31": "N-subjettiness ratio #tau_{3}/#tau_{1}",
+    "tau41": "N-subjettiness ratio #tau_{4}/#tau_{1}",
+    "tau42": "N-subjettiness ratio #tau_{4}/#tau_{2}",
     "n2b1": "energy-correlation ratio N_{2} (#beta=1)",
     "n3b1": "energy-correlation ratio N_{3} (#beta=1)",
     "lsf3": "lepton subjet fraction (3 subjets)",
-    "nconst": "number of particle-flow constituents",
-    "chmult": "charged particle multiplicity (PUPPI-weighted)",
+    # NanoAOD stores no separate "track multiplicity": a track *is* a charged
+    # particle, so chMultiplicity is the track count, and nConstituents is the
+    # total (charged + neutral) -- 26.4 + 16.1 = 42.5 ~ 43.0 for merged W.
+    "nconst": "total particle multiplicity (charged + neutral constituents)",
+    "chmult": "charged particle (track) multiplicity (PUPPI-weighted)",
     "nemult": "neutral particle multiplicity (PUPPI-weighted)",
-    "nbhad":  "number of b hadrons (ghost-clustered)",
-    "nchad":  "number of c hadrons (ghost-clustered)",
+    "nbhad":  "number of b hadrons (ghost-clustered, MC truth)",
+    "nchad":  "number of c hadrons (ghost-clustered, MC truth)",
     "chhef":  "charged hadron energy fraction",
     "nehef":  "neutral hadron energy fraction",
     "chemef": "charged electromagnetic energy fraction",
@@ -369,6 +386,17 @@ def br_label(n):
     if n.startswith("PNet_"):
         return "ParticleNet (mass-decorrelated): " + PNET_PROC.get(n[5:], n[5:])
     return n
+
+# Branches that are the output of a neural network rather than a measured jet
+# property: the ParticleNet heads, the DeepDoubleX / DeepCSV discriminants, and
+# the two ParticleNet mass-regression outputs (mreg is a network prediction of
+# the mass, not the mass built from the constituents -- msoftdrop and mass are).
+# The second ranking drops these to show what the detector-level observables do
+# on their own, without any tagger already having solved the problem.
+TAGGER_EXACT = {"ddbvl", "ddcvb", "ddcvl", "btag_deepb", "btag_hbb",
+                "mreg", "masscorr"}
+def is_tagger(n):
+    return n in TAGGER_EXACT or n.startswith("PNet_") or n.startswith("PNetM_")
 
 def br_get(fname, hname):
     """Fetch one histogram from a merged class file; returns a detached clone."""
@@ -409,22 +437,39 @@ def _zoom(hists):
                 break
     return lo, hi
 
-def plot_branches():
-    os.makedirs(BR_OUT, exist_ok=True)
+def plot_one_set(hdir, outdir, note):
+    """Panels + both rankings for one histogram set. Returns {branch: S}."""
+    out = os.path.join(BR_OUT, outdir)
+    os.makedirs(out, exist_ok=True)
     sig = ROOT.TFile.Open(os.path.join(BR_INDIR, "SIG.root"))
-    d = sig.Get("Branch")
+    d = sig.Get(hdir)
     if not d:
-        print(f"[skip] no Branch/ directory in {BR_INDIR}/SIG.root"); return
+        print(f"[skip] no {hdir}/ directory in {BR_INDIR}/SIG.root"); return {}
     names = sorted(k.GetName()[2:] for k in d.GetListOfKeys()
                    if k.GetName().startswith("W_"))
-    print(f"{len(names)} branches from {BR_INDIR}")
+    print(f"\n=== {hdir}/  ({note}) — {len(names)} branches from {BR_INDIR}")
 
     seps = {}
     for n in names:
-        hs = br_get("SIG.root", f"Branch/W_{n}")
-        hb = br_get("QCD.root", f"Branch/QCD_{n}")
+        hs = br_get("SIG.root", f"{hdir}/W_{n}")
+        hb = br_get("QCD.root", f"{hdir}/QCD_{n}")
         if not hs or not hb or hs.Integral() <= 0 or hb.Integral() <= 0:
             print(f"  [skip] {n}: empty"); continue
+        # Integral() and separation() both ignore under/overflow, so a variable
+        # whose axis is too narrow silently reads as "no separation" -- this is
+        # exactly how n3b1 (range up to 4.2 on a [-1,1] axis) came out at 0.000.
+        # Warn before that can be mistaken for a physics result.
+        for h, cl in ((hs, "W"), (hb, "QCD")):
+            N = h.GetNbinsX()
+            tot = h.Integral(0, N + 1)
+            if tot <= 0:
+                continue
+            frac = 100. * (h.GetBinContent(0) + h.GetBinContent(N + 1)) / tot
+            if frac > 0.1:
+                print(f"  [WARN] {n} ({cl}): {frac:.1f}% outside the axis "
+                      f"[{h.GetXaxis().GetXmin():g},{h.GetXaxis().GetXmax():g}] "
+                      f"-- S is computed on the visible part only")
+
         hs.Scale(1. / hs.Integral()); hb.Scale(1. / hb.Integral())
         seps[n] = separation(hs, hb)
 
@@ -440,8 +485,22 @@ def plot_branches():
         lo, hi = _zoom([hs, hb])
         if lo is not None and hi > lo:
             hb.GetXaxis().SetRangeUser(lo, hi)
-        hb.SetMaximum(1.35 * max(hs.GetMaximum(), hb.GetMaximum()))
-        hb.SetMinimum(0.)
+        # A sentinel/undefined spike can hold most of the events (n3b1 and n2b1
+        # are ~60-75% at -1, btag_hbb is 100% in one bucket), which on a linear
+        # axis flattens the real distribution onto the baseline and hides the
+        # very thing the panel exists to show. Go log-y when one bin dominates.
+        top = max(hs.GetMaximum(), hb.GetMaximum())
+        if top > 0.25:                       # both are area-normalized to 1
+            floor = min(v for h in (hs, hb)
+                        for v in (h.GetBinContent(i)
+                                  for i in range(1, h.GetNbinsX() + 1))
+                        if v > 0)
+            hb.SetMinimum(max(floor * 0.5, 1e-6))
+            hb.SetMaximum(top * 8.)
+            c.SetLogy()
+        else:
+            hb.SetMaximum(1.35 * top)
+            hb.SetMinimum(0.)
         hb.Draw("HIST"); hs.Draw("HIST SAME")
 
         leg = ROOT.TLegend(0.60, 0.75, 0.88, 0.88)
@@ -451,7 +510,9 @@ def plot_branches():
         leg.Draw()
         tx = ROOT.TLatex(); tx.SetNDC(); tx.SetTextSize(0.042)
         tx.DrawLatex(0.16, 0.85, f"S = {seps[n]:.3f}")
-        c.SaveAs(f"{BR_OUT}/{n}.png")
+        tx.SetTextSize(0.030)
+        tx.DrawLatex(0.16, 0.79, note)   # which selection this panel is under
+        c.SaveAs(f"{out}/{n}.png")
 
     order = sorted(seps, key=seps.get, reverse=True)
 
@@ -464,30 +525,87 @@ def plot_branches():
             n = n.replace(a, b)
         return n
 
-    with open(f"{BR_OUT}/separation_table.md", "w") as fh:
-        fh.write("| variable | histogram | S (physics weights) |\n|---|---|---|\n")
-        for n in order:
-            fh.write(f"| {plain(br_label(n))} | `{n}` | {seps[n]:.3f} |\n")
+    def write_table(rows, stem):
+        with open(f"{out}/{stem}.md", "w") as fh:
+            fh.write(f"Selection: {plain(note)}\n\n")
+            fh.write("| variable | histogram | S (physics weights) |\n|---|---|---|\n")
+            for n in rows:
+                fh.write(f"| {plain(br_label(n))} | `{n}` | {seps[n]:.3f} |\n")
 
-    h = ROOT.TH1F("brrank", ";;separation S", len(order), 0, len(order))
-    for i, n in enumerate(order[::-1]):
-        h.SetBinContent(i + 1, seps[n])
-        h.GetXaxis().SetBinLabel(i + 1, br_label(n))
-    c = ROOT.TCanvas("crank", "", 1250, 1450)
-    c.SetLeftMargin(0.50); c.SetGridx()   # wide margin: names are spelled out
-    c.SetTopMargin(0.02); c.SetRightMargin(0.03); c.SetBottomMargin(0.06)
-    h.SetFillColor(ROOT.kOrange + 1); h.SetBarWidth(0.8); h.SetBarOffset(0.1)
-    h.GetXaxis().SetLabelSize(0.016)          # category names
-    h.GetYaxis().SetLabelSize(0.016)          # the S scale (drawn horizontally)
-    h.GetYaxis().SetTitleSize(0.020); h.GetYaxis().SetTitleOffset(1.30)
-    h.SetStats(0)
-    h.Draw("hbar")
-    c.SaveAs(f"{BR_OUT}/separation_ranking.png")
+    def draw_ranking(rows, stem, color):
+        # Row pitch fixed at ~29 px so both charts read the same; ROOT sizes text
+        # as a fraction of the canvas, so undo that to keep a constant point size.
+        H = max(420, 29 * len(rows) + 90)
+        s = 1450. / H
+        h = ROOT.TH1F("brrank_" + stem, ";;separation S", len(rows), 0, len(rows))
+        for i, n in enumerate(rows[::-1]):
+            h.SetBinContent(i + 1, seps[n])
+            h.GetXaxis().SetBinLabel(i + 1, br_label(n))
+        c = ROOT.TCanvas("crank_" + stem, "", 1250, H)
+        c.SetLeftMargin(0.50); c.SetGridx()   # wide margin: names are spelled out
+        c.SetTopMargin(0.02 * s); c.SetRightMargin(0.03); c.SetBottomMargin(0.06 * s)
+        h.SetFillColor(color); h.SetBarWidth(0.8); h.SetBarOffset(0.1)
+        h.GetXaxis().SetLabelSize(0.016 * s)      # category names
+        h.GetYaxis().SetLabelSize(0.016 * s)      # the S scale (drawn horizontally)
+        h.GetYaxis().SetTitleSize(0.016 * s); h.GetYaxis().SetTitleOffset(1.30 / s)
+        h.SetStats(0)
+        h.Draw("hbar")
+        c.SaveAs(f"{out}/{stem}.png")
 
-    print(f"\n  {'branch':28s} {'S':>7s}")
+    write_table(order, "separation_table")
+    draw_ranking(order, "separation_ranking", ROOT.kOrange + 1)
+
+    # Same ranking with every network output removed: only the jet observables
+    # you can compute yourself from the constituents.
+    plain_order = [n for n in order if not is_tagger(n)]
+    write_table(plain_order, "separation_table_notagger")
+    draw_ranking(plain_order, "separation_ranking_notagger", ROOT.kTeal + 3)
+
+    print(f"  {'branch':28s} {'S':>7s}")
     for n in order:
-        print(f"  {n:28s} {seps[n]:7.3f}")
-    print(f"\n[done] {len(order)} panels -> {BR_OUT}")
+        print(f"  {n:28s} {seps[n]:7.3f}{'' if not is_tagger(n) else '   (tagger)'}")
+    print(f"  [done] {len(order)} panels ({len(plain_order)} non-tagger) -> {out}")
+    return seps
+
+def plot_branches():
+    """Both histogram sets, plus the with/without-m_SD comparison."""
+    res = {}
+    for hdir, outdir, note in BR_SETS:
+        res[outdir] = plot_one_set(hdir, outdir, note)
+    a, b = res.get("with_msd", {}), res.get("no_msd", {})
+    if not a or not b:
+        return
+
+    def plain(n):
+        for x, y in (("#rightarrow", "->"), ("#tau", "tau"), ("#mu", "mu"),
+                     ("#beta", "beta"), ("#eta", "eta"), ("#phi", "phi"),
+                     ("_{T}", "T"), ("_{h}", "h"), ("_{SD}", "SD"),
+                     ("_{2}", "2"), ("_{3}", "3"), ("_{1}", "1"), ("_{4}", "4"),
+                     ("{", ""), ("}", ""), ("#", "")):
+            n = n.replace(x, y)
+        return n
+
+    both = sorted(set(a) & set(b), key=lambda n: -abs(b[n] - a[n]))
+    with open(f"{BR_OUT}/msd_comparison.md", "w") as fh:
+        fh.write("How much of each branch's separation is an artefact of the "
+                 "m_SD [20,250] window.\n\nThe window keeps ~98% of merged W but "
+                 "only ~41% of QCD, and it cuts on msoftdrop -- itself the top "
+                 "non-tagger\ndiscriminant -- so `with` is a *conditional* number: "
+                 "the power a variable has once a mass cut\nhas already been "
+                 "applied. `without` is the unconditional survey. A negative delta "
+                 "means the\nvariable is genuinely more useful inside the mass "
+                 "window.\n\n")
+        fh.write("| variable | histogram | S with m_SD | S without | delta |\n")
+        fh.write("|---|---|---|---|---|\n")
+        for n in both:
+            fh.write(f"| {plain(br_label(n))} | `{n}` | {a[n]:.3f} | {b[n]:.3f} "
+                     f"| {b[n]-a[n]:+.3f} |\n")
+
+    print(f"\n=== m_SD window: effect on S (largest shift first) ===")
+    print(f"  {'branch':28s} {'with':>7s} {'without':>8s} {'delta':>8s}")
+    for n in both[:18]:
+        print(f"  {n:28s} {a[n]:7.3f} {b[n]:8.3f} {b[n]-a[n]:+8.3f}")
+    print(f"\n[done] -> {BR_OUT}  (with_msd/, no_msd/, msd_comparison.md)")
 
 if __name__ == "__main__":
     if os.environ.get('MODE') == 'branches':

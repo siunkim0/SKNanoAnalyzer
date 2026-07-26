@@ -287,9 +287,15 @@ void Wtag::executeEvent() {
             //-- substructure
             F("tau1", fj.Tau1());  F("tau2", fj.Tau2());
             F("tau3", fj.Tau3());  F("tau4", fj.Tau4());
+            // Adjacent ratios test "is it N-prong rather than (N-1)-prong"; the
+            // skip-a-step ones ask a different question, and for a 2-prong W the
+            // relevant contrast is against 1 axis, not against the neighbour.
             S("tau21", fj.Tau1() > 0. ? fj.Tau2() / fj.Tau1() : -1.f);
             S("tau32", fj.Tau2() > 0. ? fj.Tau3() / fj.Tau2() : -1.f);
             S("tau43", fj.Tau3() > 0. ? fj.Tau4() / fj.Tau3() : -1.f);
+            S("tau31", fj.Tau1() > 0. ? fj.Tau3() / fj.Tau1() : -1.f);
+            S("tau41", fj.Tau1() > 0. ? fj.Tau4() / fj.Tau1() : -1.f);
+            S("tau42", fj.Tau2() > 0. ? fj.Tau4() / fj.Tau2() : -1.f);
             S("n2b1", fj.N2b1());   // -1 sentinel: defined only for raw pT > 250
             // N3 is NOT bounded by 1 the way N2 is: measured range [0.04, 4.21],
             // ~94% of defined entries exceed 1. With the [-1,1] score axis they
@@ -433,6 +439,18 @@ void Wtag::executeEvent() {
         SetBranch("jets", "pnet_tvsqcd",   fj.ParticleNetWithMass_TvsQCD());
         SetBranch("jets", "pnet_xqqvsqcd", fj.ParticleNet_XqqVsQCD());
         SetBranch("jets", "pnet_xggvsqcd", fj.ParticleNet_XggVsQCD());
+        // Benchmarking the mass-decorrelated tagger against XqqVsQCD alone is
+        // unfair to ParticleNet: Xqq is the light-quark head, and ~half of
+        // hadronic W decays contain charm (W->cs), so much of the signal is
+        // routed elsewhere -- measured, xcc alone rejects better than xqq on
+        // these W jets. The fair discriminant is (Xqq+Xcc+Xbb)/(...+QCD), which
+        // needs the raw QCD probability to undo the stored VsQCD ratios:
+        //     X = QCD * r / (1 - r)   for   r = X/(X + QCD).
+        // Run-3-only arrays, same guard the histogram block uses. -10 is the
+        // sentinel NanoAOD itself uses for an unevaluated vs-QCD ratio.
+        SetBranch("jets", "pnet_qcd",      Run == 3 ? FatJet_particleNet_QCD[ifj]      : -10.f);
+        SetBranch("jets", "pnet_xccvsqcd", Run == 3 ? FatJet_particleNet_XccVsQCD[ifj] : -10.f);
+        SetBranch("jets", "pnet_xbbvsqcd", Run == 3 ? FatJet_particleNet_XbbVsQCD[ifj] : -10.f);
         //-- gen truth of the match
         SetBranch("jets", "gen_wpt",  mW ? (float)mW->w->Pt() : -1.f);
         SetBranch("jets", "gen_drqq", mW ? (float)mW->q1->DeltaR(*mW->q2) : -1.f);
