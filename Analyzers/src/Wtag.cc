@@ -237,16 +237,39 @@ void Wtag::executeEvent() {
         int label = mW ? (hasB ? 2 : 1) : 0;
 
         //==== v2b: raw-branch shape comparison, merged W (label 1) vs QCD (label 0).
-        //     Same boundary as the ML dataset so the numbers stay comparable with v2;
         //     label 2 (W+b/top) is a spectator and is not drawn.
         //     Class is by label here, but the QCD class must be taken from the QCD
         //     samples only at merge time — label 0 also exists in ttbar/diboson.
-        if (label != 2 &&
-            fj.Pt() > 200. && fj.Pt() < 1200. && fj.SDMass() > 20. && fj.SDMass() < 250.) {
+        //
+        //     Two histogram sets, because the m_SD window changes the answer rather
+        //     than just tightening it. "Branch/" keeps m_SD in [20,250] (the v2 ML
+        //     dataset boundary, and the regime a deployed tagger actually runs in);
+        //     "BranchNoMSD/" drops it. That window keeps 98% of merged W but only
+        //     41% of QCD, so ranking the mass branches inside it is circular —
+        //     msoftdrop is being scored on a sample msoftdrop already purified.
+        //     Filling both makes every branch's conditionality measurable, including
+        //     the ParticleNet scores, which are not written to the `jets` tree and so
+        //     cannot be re-measured offline the way tau21/n2b1 can.
+        const bool pass_pt  = fj.Pt() > 200. && fj.Pt() < 1200.;
+        const bool pass_msd = fj.SDMass() > 20. && fj.SDMass() < 250.;
+        for (int pass = 0; pass < 2 && label != 2 && pass_pt; ++pass) {
+            if (pass == 0 && !pass_msd) continue;
 
-            const TString c = (label == 1) ? "Branch/W_" : "Branch/QCD_";
-            // scores: 200 bins over [-1,1] keeps the "undefined" sentinel visible
-            auto S = [&](const TString &n, float v) { FillHist(c + n, v, weight, 200, -1., 1.); };
+            const TString c = TString(pass == 0 ? "Branch/" : "BranchNoMSD/")
+                            + (label == 1 ? "W_" : "QCD_");
+            // Scores live in [-1,1], but two branches escape it: the ParticleNet
+            // vs-QCD ratios use **-10** (not -1) for "not evaluated", and lsf3 has a
+            // tail out to ~33. On a plain [-1,1] axis both land in under/overflow,
+            // which Integral() and the separation loop ignore — so the two classes
+            // get normalised over different subsets (measured: 1.5% of W vs 3.3% of
+            // QCD undefined for the PNet_x* heads). Pad by 10 bins each side and
+            // bucket out-of-range values there: physical binning is unchanged at
+            // 0.01/bin, nothing is dropped, and the undefined spike sits at -1.05
+            // where it cannot be mistaken for a real score.
+            auto S = [&](const TString &n, float v) {
+                float x = (v < -1.f) ? -1.05f : ((v > 1.f) ? 1.05f : v);
+                FillHist(c + n, x, weight, 220, -1.1, 1.1);
+            };
             auto F = [&](const TString &n, float v) { FillHist(c + n, v, weight, 100,  0., 1.); };
             auto N = [&](const TString &n, float v, int hi) { FillHist(c + n, v, weight, hi, 0., (float)hi); };
             auto M = [&](const TString &n, float v) { FillHist(c + n, v, weight, 120,  0., 300.); };
@@ -268,7 +291,11 @@ void Wtag::executeEvent() {
             S("tau32", fj.Tau2() > 0. ? fj.Tau3() / fj.Tau2() : -1.f);
             S("tau43", fj.Tau3() > 0. ? fj.Tau4() / fj.Tau3() : -1.f);
             S("n2b1", fj.N2b1());   // -1 sentinel: defined only for raw pT > 250
-            S("n3b1", fj.N3b1());
+            // N3 is NOT bounded by 1 the way N2 is: measured range [0.04, 4.21],
+            // ~94% of defined entries exceed 1. With the [-1,1] score axis they
+            // all landed in overflow, which Integral()/separation() ignore, and
+            // n3b1 wrongly read as S=0 rather than its true 0.024. Own axis.
+            FillHist(c + "n3b1", fj.N3b1(), weight, 250, -1.25, 5.);
             S("lsf3", fj.LSF3());
 
             //-- multiplicities & energy fractions
