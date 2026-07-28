@@ -286,7 +286,8 @@ void fake::measureFakeRate(const TriggerPath &path, float weight) {
         //==== per-parton-flavor 2D 히스토그램 (flavor-weighted FR 용, MC only)
         //==== source jet 을 gen / reco 두 방식으로 매칭해 b/c/s/d/u/g 로 분류
         //==== FR_flavor = tight_flavor / loose_flavor (offline)
-        if (!IsDATA && syst == "Central") {
+        //==== fake muon 만 (GetLeptonType<=0): TTLJ 등 prompt 오염 표본에서 필수
+        if (!IsDATA && syst == "Central" && GetLeptonType(mu, gens) <= 0) {
             const TString gf = GenJetFlavor(mu);
             const TString rf = RecoJetFlavor(mu);
             for (const auto &tag : tags) {
@@ -386,7 +387,7 @@ TString fake::LeptonTypeToString(int leptonType) const {
 //   partonFlavour: 21=gluon, 1=d, 2=u, 3=s (부호 = quark/antiquark)
 //   매칭 실패(partonFlavour==0 등)는 unmatched
 //==============================================================
-TString fake::FlavorTag(int partonFlavour, int hadronFlavour) const {
+TString fake::FlavorTag(int partonFlavour, int hadronFlavour, bool isRecoJet) const {
     if (hadronFlavour == 5) return "b";
     if (hadronFlavour == 4) return "c";
     const int ap = abs(partonFlavour);
@@ -394,6 +395,9 @@ TString fake::FlavorTag(int partonFlavour, int hadronFlavour) const {
     if (ap == 3)  return "s";
     if (ap == 2)  return "u";
     if (ap == 1)  return "d";
+    //==== reco jet 인데 parton/hadron flavour 가 모두 0 → gen 대응이 없는 pileup jet
+    //==== (gen jet 컬렉션에는 pileup jet 이 없으므로 gen 쪽은 unmatched 로 둔다)
+    if (isRecoJet && partonFlavour == 0 && hadronFlavour == 0) return "pileup";
     return "unmatched";
 }
 
@@ -411,7 +415,7 @@ TString fake::RecoJetFlavor(const Muon &mu) const {
             matched = true;
         }
     }
-    return matched ? FlavorTag(bestParton, bestHadron) : "unmatched";
+    return matched ? FlavorTag(bestParton, bestHadron, true) : "unmatched";
 }
 
 //==== muon 을 가장 가까운 gen jet 에 dR<0.4 매칭 (source jet 의 진짜 flavor)
@@ -428,5 +432,5 @@ TString fake::GenJetFlavor(const Muon &mu) const {
             matched = true;
         }
     }
-    return matched ? FlavorTag(bestParton, bestHadron) : "unmatched";
+    return matched ? FlavorTag(bestParton, bestHadron, false) : "unmatched";
 }
