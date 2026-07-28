@@ -82,12 +82,18 @@ void track::executeEvent() {
             FillHist("NoSelFlavIdx/MuonJetMatchStatRaw", mstat, 1.f,    3, -0.5, 2.5);
         }
 
-        //---- (v15) prompt muon 제거: undef/gluon이 정말 prompt(+uds/g mistag)인지 검증용.
+        //---- (v15) prompt muon 판정: undef/gluon이 정말 prompt(+uds/g mistag)인지 검증용.
         //     GetLeptonType>0 = prompt(비-fake, 비-hadronic 기원: EW prompt/tau daughter/internal conv),
         //     <=0 = fake(hadron 기원/external conv/미매칭). fake.cc·elecfake.cc와 동일 컨벤션.
-        if (GetLeptonType(mu, gens) > 0) continue;
+        //     (v17) v15처럼 skip하지 않고 두 디렉토리에 동시 저장:
+        //       NoSelFlavIdx/     = 전 muon        (= v13)
+        //       NoSelFlavIdxFake/ = prompt 제거    (= v15)
+        //     → 한 번의 job으로 v13/v15 비교가 모두 가능.
+        const bool isPrompt = (GetLeptonType(mu, gens) > 0);
 
         //---- flavour 카테고리 (유저 정의: b/c=hadronFlavour, u/d/s/g=partonFlavour)
+        //     (v17) _pu   = partonFlavour 0 & hadronFlavour 0 → gen parton 미매칭 = pileup jet
+        //           _undef = 나머지 (주로 |partonFlavour| 4/5 인데 hadronFlavour 0 = ghost 매칭 실패)
         auto flavCat = [&](int idx) -> TString {
             if (idx < 0) return "_nojet";
             const Jet &j = rawJets[idx];
@@ -99,6 +105,7 @@ void track::executeEvent() {
             if (apf == 1)  return "_d";
             if (apf == 3)  return "_s";
             if (apf == 21) return "_g";
+            if (apf == 0)  return "_pu";
             return "_undef";
         };
 
@@ -116,7 +123,7 @@ void track::executeEvent() {
         float conePt = mu.Pt() * (1.f + std::max(0.f, mu.MiniPFRelIso() - 0.1f));
         float mt = std::sqrt(2.f * mu.Pt() * METv.Pt() * (1.f - std::cos(mu.DeltaPhi(METv))));
 
-        auto fillMuVars = [&](const TString &pf, const TString &cat) {
+        auto fillMuVars = [&](const TString &pf, const TString &cat) -> void {
             FillHist(pf + "Pt"       + cat, mu.Pt(),           weight, 200,  0.,  200.);
             FillHist(pf + "Eta"      + cat, mu.Eta(),          weight,  50, -2.5,   2.5);
             FillHist(pf + "dXY"      + cat, mu.dXY(),          weight, 200, -0.5,   0.5);
@@ -135,50 +142,59 @@ void track::executeEvent() {
 
         //---- PF 연관 jet flavour 기준으로 전 변수 fill
         TString cat = flavCat(jidx);
-        fillMuVars("NoSelFlavIdx/Muon_", cat);
-        if (jidx >= 0) {
-            const Jet &mj = rawJets[jidx];
-            FillHist("NoSelFlavIdx/Muon_MatchedJetPt" + cat, mj.Pt(),          weight, 100, 0., 1000.);
-            FillHist("NoSelFlavIdx/Muon_MatchedJetDR" + cat, mu.DeltaR(mj),    weight, 100, 0.,   10.);
 
-            //---- (v13) 소속 jet의 track 다중도 (total/charged/neutral) — QCD vs TTJJ 비교용
-            //     charged/neutral branch는 Run3(2022+) NanoAODv12+에서 정상 fill
-            const int   nTot = mj.nConstituents();
-            const int   nCh  = mj.chMultiplicity();
-            const int   nNe  = mj.neMultiplicity();
-            const float mjpt = mj.Pt();
-            auto fillTrk = [&](const TString &suf) {
-                FillHist("NoSelFlavIdx/Muon_MatchedJetNConst" + suf, nTot, weight, 100, 0., 100.);
-                FillHist("NoSelFlavIdx/Muon_MatchedJetChMult" + suf, nCh,  weight, 100, 0., 100.);
-                FillHist("NoSelFlavIdx/Muon_MatchedJetNeMult" + suf, nNe,  weight, 100, 0., 100.);
-                //---- (v13) ⟨N⟩ vs jet pT 프로파일용 2D (v6 profile_flavour 스타일)
-                FillHist("NoSelFlavIdx/Muon_MatchedJetNConst_vs_Pt" + suf, mjpt, nTot, weight, 300, 0., 3000., 100, 0., 100.);
-                FillHist("NoSelFlavIdx/Muon_MatchedJetChMult_vs_Pt" + suf, mjpt, nCh,  weight, 300, 0., 3000., 100, 0., 100.);
-                FillHist("NoSelFlavIdx/Muon_MatchedJetNeMult_vs_Pt" + suf, mjpt, nNe,  weight, 300, 0., 3000., 100, 0., 100.);
-            };
-            fillTrk("");     // inclusive
-            fillTrk(cat);    // flavour split
-        }
-
-        //---- (v12) undef 트레이스: 어떤 flavour 코드/pdgId가 fall-through 되는지
-        if (cat == "_undef") {
-            //-- 소속 jet의 raw flavour 코드 (flavCat 어느 case에도 안 걸린 값)
+        //---- (v17) 한 muon을 dir 하나에 통째로 fill하는 람다.
+        //     "NoSelFlavIdx/"(전 muon) + prompt가 아니면 "NoSelFlavIdxFake/"에도 fill.
+        auto fillBlock = [&](const TString &dir) -> void {
+            fillMuVars(dir + "Muon_", cat);
             if (jidx >= 0) {
-                FillHist("NoSelFlavIdx/Undef_JetPartonFlav", rawJets[jidx].partonFlavour(), weight, 101, -50.5, 50.5);
-                FillHist("NoSelFlavIdx/Undef_JetHadronFlav", rawJets[jidx].hadronFlavour(), weight,  11,  -0.5, 10.5);
+                const Jet &mj = rawJets[jidx];
+                FillHist(dir + "Muon_MatchedJetPt" + cat, mj.Pt(),       weight, 100, 0., 1000.);
+                FillHist(dir + "Muon_MatchedJetDR" + cat, mu.DeltaR(mj), weight, 100, 0.,   10.);
+
+                //---- (v13) 소속 jet의 track 다중도 (total/charged/neutral) — QCD vs TTJJ 비교용
+                //     charged/neutral branch는 Run3(2022+) NanoAODv12+에서만 정상 fill (Run2 v9엔 없음)
+                const int   nTot = mj.nConstituents();
+                const int   nCh  = mj.chMultiplicity();
+                const int   nNe  = mj.neMultiplicity();
+                const float mjpt = mj.Pt();
+                auto fillTrk = [&](const TString &suf) {
+                    FillHist(dir + "Muon_MatchedJetNConst" + suf, nTot, weight, 100, 0., 100.);
+                    FillHist(dir + "Muon_MatchedJetChMult" + suf, nCh,  weight, 100, 0., 100.);
+                    FillHist(dir + "Muon_MatchedJetNeMult" + suf, nNe,  weight, 100, 0., 100.);
+                    //---- (v13) ⟨N⟩ vs jet pT 프로파일용 2D (v6 profile_flavour 스타일)
+                    FillHist(dir + "Muon_MatchedJetNConst_vs_Pt" + suf, mjpt, nTot, weight, 300, 0., 3000., 100, 0., 100.);
+                    FillHist(dir + "Muon_MatchedJetChMult_vs_Pt" + suf, mjpt, nCh,  weight, 300, 0., 3000., 100, 0., 100.);
+                    FillHist(dir + "Muon_MatchedJetNeMult_vs_Pt" + suf, mjpt, nNe,  weight, 300, 0., 3000., 100, 0., 100.);
+                };
+                fillTrk("");     // inclusive
+                fillTrk(cat);    // flavour split
             }
-            //-- muon 자체의 gen 기원: NanoAOD genPartFlav 요약 (0=nomatch,1=prompt,3=light,4=c,5=b,15=tau)
-            FillHist("NoSelFlavIdx/Undef_MuonGenPartFlav", (int)mu.GenPartFlav(), weight, 16, -0.5, 15.5);
-            //-- muon gen-link(Muon_genPartIdx)으로 실제 pdgId 해석 (|PID|, 하드론이면 큰 값)
-            int gPID = 0;
-            short gIdx = mu.GenPartIdx();
-            if (gIdx >= 0) {
-                for (const auto &g : gens) {
-                    if (g.Index() == gIdx) { gPID = g.PID(); break; }
+
+            //---- (v12) undef 트레이스: 어떤 flavour 코드/pdgId가 fall-through 되는지
+            //     (v17) pileup(_pu)이 분리됐으므로 여기 남는 건 주로 |parton|=4/5 & hadron=0
+            if (cat == "_undef") {
+                //-- 소속 jet의 raw flavour 코드 (flavCat 어느 case에도 안 걸린 값)
+                if (jidx >= 0) {
+                    FillHist(dir + "Undef_JetPartonFlav", rawJets[jidx].partonFlavour(), weight, 101, -50.5, 50.5);
+                    FillHist(dir + "Undef_JetHadronFlav", rawJets[jidx].hadronFlavour(), weight,  11,  -0.5, 10.5);
                 }
+                //-- muon 자체의 gen 기원: NanoAOD genPartFlav 요약 (0=nomatch,1=prompt,3=light,4=c,5=b,15=tau)
+                FillHist(dir + "Undef_MuonGenPartFlav", (int)mu.GenPartFlav(), weight, 16, -0.5, 15.5);
+                //-- muon gen-link(Muon_genPartIdx)으로 실제 pdgId 해석 (|PID|, 하드론이면 큰 값)
+                int gPID = 0;
+                short gIdx = mu.GenPartIdx();
+                if (gIdx >= 0) {
+                    for (const auto &g : gens) {
+                        if (g.Index() == gIdx) { gPID = g.PID(); break; }
+                    }
+                }
+                FillHist(dir + "Undef_MuonGenPID", std::abs(gPID), weight, 1000, 0., 1000.);
             }
-            FillHist("NoSelFlavIdx/Undef_MuonGenPID", std::abs(gPID), weight, 1000, 0., 1000.);
-        }
+        };
+
+        fillBlock("NoSelFlavIdx/");                    // = v13 (전 muon)
+        if (!isPrompt) fillBlock("NoSelFlavIdxFake/"); // = v15 (prompt 제거)
     }
 
     //==== (v14) raw jet (무선택) track 다중도 vs pT — TTLJ 스터디 (MC 전용, flavour truth)
@@ -194,6 +210,7 @@ void track::executeEvent() {
             else if (apf == 1)  fcat = "_d";
             else if (apf == 3)  fcat = "_s";
             else if (apf == 21) fcat = "_g";
+            else if (apf == 0)  fcat = "_pu";   // (v17) parton/hadron 둘 다 0 = gen 미매칭 pileup jet
             const float jpt = j.Pt();
             const int   nT  = j.nConstituents();
             const int   nC  = j.chMultiplicity();
