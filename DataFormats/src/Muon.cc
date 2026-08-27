@@ -30,6 +30,21 @@ Muon::Muon() {
     
     // jet matching
     j_jetIdx = -1;
+    j_svIdx = -1;
+
+    // NanoAOD 추가 변수 (fake flavor BDT 입력용)
+    j_ptErr = -999.;
+    j_tunepRelPt = -999.;
+    j_segmentComp = -999.;
+    j_nStations = 0;
+    j_miniPFRelIso_chg = -999.;
+    j_pfRelIso03_chg = -999.;
+    j_jetPtRelv2 = -999.;
+    j_jetRelIso = -999.;
+    j_jetNDauCharged = 0;
+    j_isPFcand = false;
+    j_highPurity = false;
+    j_tightCharge = 0;
 }
 
 Muon::~Muon() {}

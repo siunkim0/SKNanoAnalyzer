@@ -526,6 +526,11 @@ RVec<Muon> AnalyzerCore::GetAllMuons() {
         muon.SetIP3D(Muon_ip3d[i], Muon_sip3d[i]);
         muon.SetNTrackerLayers(Muon_nTrackerLayers[i]);
         muon.SetGenPartFlav(Muon_genPartFlav[i]);
+        muon.SetTrackErrors(Muon_ptErr[i], Muon_tunepRelPt[i]);
+        muon.SetMuonQuality(Muon_segmentComp[i], Muon_nStations[i]);
+        muon.SetChargedIso(Muon_miniPFRelIso_chg[i], Muon_pfRelIso03_chg[i]);
+        muon.SetJetVars(Muon_jetPtRelv2[i], Muon_jetRelIso[i], Muon_jetNDauCharged[i]);
+        muon.SetTrackFlags(Muon_isPFcand[i], Muon_highPurity[i], Muon_tightCharge[i]);
         muon.SetBIDBit(Muon::BooleanID::LOOSE, Muon_looseId[i]);
         muon.SetBIDBit(Muon::BooleanID::MEDIUM, Muon_mediumId[i]);
         muon.SetBIDBit(Muon::BooleanID::MEDIUMPROMPT, Muon_mediumPromptId[i]);
@@ -540,6 +545,7 @@ RVec<Muon> AnalyzerCore::GetAllMuons() {
             muon.SetWIDBit(Muon::WorkingPointID::MVAMU, Muon_mvaMuID_WP[i]);
             muon.SetGenPartIdx(Muon_genPartIdx[i]);
             muon.SetJetIdx(Muon_jetIdx[i]);
+            muon.SetSVIdx(Muon_svIdx[i]);   // NanoAODv12+ only; stays -1 in Run2
         }
         else if(Run == 2){
             muon.SetWIDBit(Muon::WorkingPointID::MVAMU, Muon_mvaId[i]);
@@ -986,10 +992,11 @@ RVec<Jet> AnalyzerCore::GetAllJets() {
                    Jet_btagDeepFlavQG[i],
                    -999., -999., -999., -999.,
                    -999., -999., -999., -999., -999.};
-            jet.SetMultiplicities(Jet_nConstituents[i], 
-                                  Jet_nElectrons_RunII[i], 
+            jet.SetMultiplicities(Jet_nConstituents[i],
+                                  Jet_nElectrons_RunII[i],
                                   Jet_nMuons_RunII[i],
                                   0);
+            jet.SetQGL(Jet_qgl[i]);   // quark-gluon likelihood (Run 2 only)
             if(!IsDATA){
                 jet.SetMatchingIndices(Jet_electronIdx1_RunII[i], 
                                        Jet_electronIdx2_RunII[i], 
@@ -1215,6 +1222,9 @@ RVec<FatJet> AnalyzerCore::GetAllFatJets() {
 
             fatjet.SetJetID(FatJet_jetId[i]);
             if(!IsDATA) fatjet.SetGenMatchIDs(FatJet_genJetAK8Idx[i], FatJet_subJetIdx1[i], FatJet_subJetIdx2[i]);
+            fatjet.SetECFRatios(FatJet_n2b1[i], FatJet_n3b1[i]);
+            fatjet.SetMultiplicities(FatJet_chMultiplicity[i], FatJet_neMultiplicity[i]);
+            fatjet.SetEnergyFractions(FatJet_chHEF[i], FatJet_neHEF[i], FatJet_chEmEF[i], FatJet_neEmEF[i], FatJet_muEF[i]);
         }
         else if(Run == 2){
             pnet_m = {FatJet_particleNet_H4qvsQCD[i], FatJet_particleNet_HccvsQCD[i],

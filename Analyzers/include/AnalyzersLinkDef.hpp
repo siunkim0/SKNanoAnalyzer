@@ -25,3 +25,8 @@
 #pragma link C++ class TestGetLeptonType+;
 #pragma link C++ class MeasTrigEff+;
 #pragma link C++ class MuonTnPProducer+;
+#pragma link C++ class fake+;
+#pragma link C++ class fakeV4+;
+#pragma link C++ class closnff+;
+#pragma link C++ class bkg+;
+#pragma link C++ class elecfake+;

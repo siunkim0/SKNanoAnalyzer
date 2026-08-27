@@ -681,5 +681,131 @@
         "sumsign": 962459.0,
         "sumW": 962459.0,
         "ref": "XSDB"
+    },
+    "QCD_Pt-170to300": {
+        "isMC": 1,
+        "PD": "QCD_PT-170to300_TuneCP5_13p6TeV_pythia8",
+        "xsec": 113700.0,
+        "nmc": 805272.0,
+        "sumsign": 805272.0,
+        "sumW": 805272.0,
+        "ref": "XSDB"
+    },
+    "QCD_Pt-300to470": {
+        "isMC": 1,
+        "PD": "QCD_PT-300to470_TuneCP5_13p6TeV_pythia8",
+        "xsec": 7589.0,
+        "nmc": 57575601.0,
+        "sumsign": 57575601.0,
+        "sumW": 57575606.45358789,
+        "ref": "XSDB"
+    },
+    "QCD_Pt-470to600": {
+        "isMC": 1,
+        "PD": "QCD_PT-470to600_TuneCP5_13p6TeV_pythia8",
+        "xsec": 626.4,
+        "nmc": 976760.0,
+        "sumsign": 976760.0,
+        "sumW": 976760.0162681281,
+        "ref": "XSDB"
+    },
+    "QCD_Pt-600to800": {
+        "isMC": 1,
+        "PD": "QCD_PT-600to800_TuneCP5_13p6TeV_pythia8",
+        "xsec": 178.6,
+        "nmc": 7839456.0,
+        "sumsign": 7839456.0,
+        "sumW": 7839456.0,
+        "ref": "XSDB"
+    },
+    "QCD_Pt-800to1000": {
+        "isMC": 1,
+        "PD": "QCD_PT-800to1000_TuneCP5_13p6TeV_pythia8",
+        "xsec": 30.57,
+        "nmc": 4400187.0,
+        "sumsign": 4400187.0,
+        "sumW": 4400187.0,
+        "ref": "XSDB"
+    },
+    "QCD_Pt-1000to1400": {
+        "isMC": 1,
+        "PD": "QCD_PT-1000to1400_TuneCP5_13p6TeV_pythia8",
+        "xsec": 8.92,
+        "nmc": 2447668.0,
+        "sumsign": 2447668.0,
+        "sumW": 2447668.0,
+        "ref": "XSDB"
+    },
+    "QCD_Pt-1400to1800": {
+        "isMC": 1,
+        "PD": "QCD_PT-1400to1800_TuneCP5_13p6TeV_pythia8",
+        "xsec": 0.8103,
+        "nmc": 7432864.0,
+        "sumsign": 7432864.0,
+        "sumW": 7432864.0,
+        "ref": "XSDB"
+    },
+    "QCD_Pt-1800to2400": {
+        "isMC": 1,
+        "PD": "QCD_PT-1800to2400_TuneCP5_13p6TeV_pythia8",
+        "xsec": 0.1148,
+        "nmc": 693521.0,
+        "sumsign": 693521.0,
+        "sumW": 693521.0,
+        "ref": "XSDB"
+    },
+    "QCD_Pt-2400to3200": {
+        "isMC": 1,
+        "PD": "QCD_PT-2400to3200_TuneCP5_13p6TeV_pythia8",
+        "xsec": 0.007542,
+        "nmc": 2152724.0,
+        "sumsign": 2152724.0,
+        "sumW": 2152724.0,
+        "ref": "XSDB"
+    },
+    "TTJJ_powheg": {
+        "isMC": 1,
+        "PD": "TTto4Q_TuneCP5_13p6TeV_powheg-pythia8",
+        "xsec": 419.68,
+        "nmc": 53220176.0,
+        "sumsign": 52789430.0,
+        "sumW": 18485274703.100002,
+        "ref": "https://twiki.cern.ch/twiki/bin/view/LHCPhysics/TtbarNNLO"
+    },
+    "QCD_Pt-80to120": {
+        "isMC": 1,
+        "PD": "QCD_PT-80to120_TuneCP5_13p6TeV_pythia8",
+        "xsec": 2534000.0,
+        "nmc": 983532.0,
+        "sumsign": 983532.0,
+        "sumW": 983621.6110495224,
+        "ref": "XSDB"
+    },
+    "QCD_Pt-120to170": {
+        "isMC": 1,
+        "PD": "QCD_PT-120to170_TuneCP5_13p6TeV_pythia8",
+        "xsec": 445800.0,
+        "nmc": 1418925.0,
+        "sumsign": 1418925.0,
+        "sumW": 1418943.2479210573,
+        "ref": "XSDB"
+    },
+    "QCD_Pt-30to50": {
+        "isMC": 1,
+        "PD": "QCD_PT-30to50_TuneCP5_13p6TeV_pythia8",
+        "xsec": 113300000.0,
+        "nmc": 1198100.0,
+        "sumsign": 1198100.0,
+        "sumW": 1198100.0,
+        "ref": "XSDB"
+    },
+    "QCD_Pt-50to80": {
+        "isMC": 1,
+        "PD": "QCD_PT-50to80_TuneCP5_13p6TeV_pythia8",
+        "xsec": 16760000.0,
+        "nmc": 1443095.0,
+        "sumsign": 1443095.0,
+        "sumW": 1443095.0,
+        "ref": "XSDB"
     }
 }

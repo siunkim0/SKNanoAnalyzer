@@ -108,6 +108,37 @@ public:
     void SetJetIdx(short jetIdx) { j_jetIdx = jetIdx; }
     inline short JetIdx() const { return j_jetIdx; }
 
+    // NanoAOD 에서 그대로 가져오는 추가 변수들 (fake flavor BDT 입력용)
+    //   svIdx 는 NanoAODv12+ 에만 있으므로 Run2 에서는 -1 로 남는다
+    void SetSVIdx(short svIdx) { j_svIdx = svIdx; }
+    inline short SVIdx() const { return j_svIdx; }
+
+    void SetTrackErrors(float ptErr, float tunepRelPt) { j_ptErr = ptErr; j_tunepRelPt = tunepRelPt; }
+    inline float PtErr() const { return j_ptErr; }
+    inline float TunepRelPt() const { return j_tunepRelPt; }
+
+    void SetMuonQuality(float segmentComp, int nStations) { j_segmentComp = segmentComp; j_nStations = nStations; }
+    inline float SegmentComp() const { return j_segmentComp; }
+    inline int NStations() const { return j_nStations; }
+
+    void SetChargedIso(float miniChg, float pf03Chg) { j_miniPFRelIso_chg = miniChg; j_pfRelIso03_chg = pf03Chg; }
+    inline float MiniPFRelIsoChg() const { return j_miniPFRelIso_chg; }
+    inline float PfRelIso03Chg() const { return j_pfRelIso03_chg; }
+
+    void SetJetVars(float jetPtRelv2, float jetRelIso, int jetNDauCharged) {
+        j_jetPtRelv2 = jetPtRelv2; j_jetRelIso = jetRelIso; j_jetNDauCharged = jetNDauCharged;
+    }
+    inline float JetPtRelv2() const { return j_jetPtRelv2; }
+    inline float JetRelIso() const { return j_jetRelIso; }
+    inline int JetNDauCharged() const { return j_jetNDauCharged; }
+
+    void SetTrackFlags(bool isPFcand, bool highPurity, int tightCharge) {
+        j_isPFcand = isPFcand; j_highPurity = highPurity; j_tightCharge = tightCharge;
+    }
+    inline bool isPFcand() const { return j_isPFcand; }
+    inline bool highPurity() const { return j_highPurity; }
+    inline int TightCharge() const { return j_tightCharge; }
+
     // ID helper functions
     bool PassID(const MuonID ID) const;
     bool PassID(const TString ID) const;
@@ -126,7 +157,16 @@ private:
     short j_genPartIdx;
     unsigned char j_genPartFlav;
     short j_jetIdx;
-    ClassDef(Muon, 1);
+    short j_svIdx;
+    float j_ptErr, j_tunepRelPt;
+    float j_segmentComp;
+    int j_nStations;
+    float j_miniPFRelIso_chg, j_pfRelIso03_chg;
+    float j_jetPtRelv2, j_jetRelIso;
+    int j_jetNDauCharged;
+    bool j_isPFcand, j_highPurity;
+    int j_tightCharge;
+    ClassDef(Muon, 2);
 };
 
 #endif

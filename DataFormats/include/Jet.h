@@ -83,6 +83,10 @@ public:
   inline short nMuons() const { return j_nMuons; }
   inline short nSVs() const { return j_nSVs; }
 
+  // quark-gluon likelihood discriminant (Run 2 NanoAOD: Jet_qgl)
+  inline void SetQGL(float qgl) { j_qgl = qgl; }
+  inline float qgl() const { return j_qgl; }
+
   // For NanoAODv13
   inline void SetHadronMultiplicities(unsigned char chMult, unsigned char neMult){
     j_chMultiplicity = chMult;
@@ -219,6 +223,7 @@ private:
   short j_partonFlavour;
   // others
   float j_area;
+  float j_qgl; // quark-gluon likelihood (Run 2)
   // int j_hfadjacentEtaStripsSize;
   // int j_hfcentralEtaStripSize;
   // float j_hfsigmaEtaEta;
