@@ -92,20 +92,22 @@ void track::executeEvent() {
         const bool isPrompt = (GetLeptonType(mu, gens) > 0);
 
         //---- flavour 카테고리 (유저 정의: b/c=hadronFlavour, u/d/s/g=partonFlavour)
-        //     (v17) _pu   = partonFlavour 0 & hadronFlavour 0 → gen parton 미매칭 = pileup jet
+        //     (v18) _pu = genJetIdx < 0 (매칭된 GenJet 없음 = pileup jet) — v17의
+        //           parton 0 & hadron 0 정의를 대체. 가장 먼저 판정하므로 나머지
+        //           카테고리는 모두 "GenJet 매칭된" jet.
         //           _undef = 나머지 (주로 |partonFlavour| 4/5 인데 hadronFlavour 0 = ghost 매칭 실패)
         auto flavCat = [&](int idx) -> TString {
             if (idx < 0) return "_nojet";
             const Jet &j = rawJets[idx];
             int hf  = j.hadronFlavour();
             int apf = std::abs(j.partonFlavour());
+            if (j.genJetIdx() < 0) return "_pu";
             if (hf == 5)   return "_b";
             if (hf == 4)   return "_c";
             if (apf == 2)  return "_u";
             if (apf == 1)  return "_d";
             if (apf == 3)  return "_s";
             if (apf == 21) return "_g";
-            if (apf == 0)  return "_pu";
             return "_undef";
         };
 
@@ -123,6 +125,17 @@ void track::executeEvent() {
         float conePt = mu.Pt() * (1.f + std::max(0.f, mu.MiniPFRelIso() - 0.1f));
         float mt = std::sqrt(2.f * mu.Pt() * METv.Pt() * (1.f - std::cos(mu.DeltaPhi(METv))));
 
+        //---- (v21) isolation 변수는 0 ~ O(50) 까지 3 decade 를 커버해야 한다. v20까지 쓰던
+        //     균일 0~2 binning 으로는 b-jet muon 의 50~60% 가 overflow 로 빠져 (RelIso 62.6%,
+        //     MiniIso 51.4%, TkRelIso 48.0%) flavour 별 shape 비교 자체가 왜곡됐다.
+        //     → 0 을 첫 bin 으로 두고 1e-3 ~ 1e2 를 log 등간격으로 나눈 가변 binning 사용.
+        //     플롯 쪽은 Scale(1/Integral, "width") 로 density 정규화해야 한다.
+        static const RVec<float> ISOBINS = [] {
+            RVec<float> b{0.f};
+            for (int k = 0; k <= 100; k++) b.push_back(std::pow(10.f, -3.f + 0.05f * k));
+            return b;
+        }();
+
         auto fillMuVars = [&](const TString &pf, const TString &cat) -> void {
             FillHist(pf + "Pt"       + cat, mu.Pt(),           weight, 200,  0.,  200.);
             FillHist(pf + "Eta"      + cat, mu.Eta(),          weight,  50, -2.5,   2.5);
@@ -130,18 +143,84 @@ void track::executeEvent() {
             FillHist(pf + "dXYerr"   + cat, mu.dXYerr(),       weight, 100,  0.,    0.05);
             FillHist(pf + "dZ"       + cat, mu.dZ(),           weight, 200, -1.,    1.);
             FillHist(pf + "dZerr"    + cat, mu.dZerr(),        weight, 100,  0.,    0.1);
-            FillHist(pf + "IP3D"     + cat, mu.IP3D(),         weight, 200,  0.,    0.5);
-            FillHist(pf + "SIP3D"    + cat, mu.SIP3D(),        weight, 200,  0.,   50.);
-            FillHist(pf + "MiniIso"  + cat, mu.MiniPFRelIso(), weight, 100,  0.,    2.);
-            FillHist(pf + "RelIso"   + cat, mu.PfRelIso04(),   weight, 100,  0.,    2.);
-            FillHist(pf + "TrackIso" + cat, mu.TkRelIso(),     weight, 100,  0.,    2.);
+            //---- (v21) IP3D/SIP3D 도 b-jet muon tail 이 잘려 range 확대 (0.5→2, 50→200)
+            FillHist(pf + "IP3D"     + cat, mu.IP3D(),         weight, 200,  0.,    2.);
+            FillHist(pf + "SIP3D"    + cat, mu.SIP3D(),        weight, 200,  0.,  200.);
+            FillHist(pf + "MiniIso"  + cat, mu.MiniPFRelIso(), weight, ISOBINS);
+            FillHist(pf + "RelIso"   + cat, mu.PfRelIso04(),   weight, ISOBINS);
+            FillHist(pf + "TrackIso" + cat, mu.TkRelIso(),     weight, ISOBINS);
             FillHist(pf + "MT"       + cat, mt,                weight, 100,  0.,  200.);
             FillHist(pf + "MET"      + cat, METv.Pt(),         weight, 100,  0.,  200.);
             FillHist(pf + "ConePt"   + cat, conePt,            weight, 200,  0.,  400.);
+            //---- (v20) fake.cc BDT slim feature set 중 아직 없던 muon-level 변수들.
+            //     jetPtRelv2/jetRelIso/jetNDauCharged 는 NanoAOD Muon_* 브랜치라
+            //     소속 jet 이 저장 안 됐어도(=_nojet) 값이 있다 → 여기(fillMuVars)에 둔다.
+            FillHist(pf + "HighPurity"     + cat, (int)mu.highPurity(),   weight,   2, -0.5,   1.5);
+            FillHist(pf + "PogTight"       + cat, (int)mu.isPOGTightId(), weight,   2, -0.5,   1.5);
+            //---- (v21) segmentComp 은 정확히 1.0 인 muon 이 ~21% 라 상한 1.0 이면 그 spike 가
+            //           통째로 overflow 로 빠진다 → 1.05 로 올려 마지막 bin 에 담는다.
+            FillHist(pf + "SegmentComp"    + cat, mu.SegmentComp(),       weight, 105,  0.,    1.05);
+            FillHist(pf + "NStations"      + cat, mu.NStations(),         weight,   8, -0.5,   7.5);
+            FillHist(pf + "MiniIsoNeu"     + cat, mu.MiniPFRelIso() - mu.MiniPFRelIsoChg(),
+                                                                          weight, ISOBINS);
+            FillHist(pf + "PtErr"          + cat, mu.PtErr(),             weight, 100,  0.,   20.);
+            FillHist(pf + "JetPtRelv2"     + cat, mu.JetPtRelv2(),        weight, 100,  0.,  100.);
+            //---- (v21) jetRelIso 는 음수도 있어 log binning 불가 → range 만 -1..20 으로 확대
+            FillHist(pf + "JetRelIso"      + cat, mu.JetRelIso(),         weight, 210, -1.,   20.);
+            FillHist(pf + "JetNDauCharged" + cat, mu.JetNDauCharged(),    weight,  30, -0.5,  29.5);
         };
 
         //---- PF 연관 jet flavour 기준으로 전 변수 fill
         TString cat = flavCat(jidx);
+
+        //---- (v19) source jet 안의 secondary vertex (IVF) — fake.cc:584-631 과 동일한 계산.
+        //     b/c 분리의 고전 변수: b hadron M~5 GeV / track 많고 멀리 남, c hadron M~2 GeV.
+        //     jet 축 기준 dR<0.4 로 매칭하고, 대표 SV 는 dlenSig 가 최대인 것
+        //     (= 가장 유의미하게 변위된 vertex, HF 판별의 표준 선택).
+        //     fake.cc 와 달리 sentinel(-999) 을 쓰지 않는다 — 매칭 SV 가 없으면 그냥 fill 안 함
+        //     (sentinel 을 넣으면 underflow 에 쌓여 shape 이 망가진다).
+        int   svN = 0, svBest = -1, svNTracks = 0;
+        float svMassSum = 0.;
+        float svMass = 0., svPt = 0., svPtRatio = 0., svDlenSig = 0., svDxySig = 0.;
+        float svPAngle = 0., svChi2 = 0., svDRJet = 0., svDRMu = 0.;
+        if (jidx >= 0) {
+            const Jet  &sj     = rawJets[jidx];
+            const float jetEta = sj.Eta();
+            const float jetPhi = sj.Phi();
+            const float jetPt  = sj.Pt();
+            float bestDlenSig = -1.;
+            for (int i = 0; i < nSV; i++) {
+                float dphi = SV_phi[i] - jetPhi;
+                while (dphi >  M_PI) dphi -= 2. * M_PI;
+                while (dphi < -M_PI) dphi += 2. * M_PI;
+                const float deta = SV_eta[i] - jetEta;
+                if (std::sqrt(deta * deta + dphi * dphi) > 0.4) continue;
+                svN++;
+                svMassSum += SV_mass[i];
+                if (SV_dlenSig[i] > bestDlenSig) { bestDlenSig = SV_dlenSig[i]; svBest = i; }
+            }
+            if (svBest >= 0) {
+                svMass    = SV_mass[svBest];
+                svPt      = SV_pt[svBest];
+                svPtRatio = (jetPt > 0.) ? SV_pt[svBest] / jetPt : 0.;
+                svDlenSig = SV_dlenSig[svBest];
+                svDxySig  = SV_dxySig[svBest];
+                svPAngle  = SV_pAngle[svBest];
+                svChi2    = SV_chi2[svBest];
+                svNTracks = (int)SV_ntracks[svBest];
+                float dphiJ = SV_phi[svBest] - jetPhi;
+                while (dphiJ >  M_PI) dphiJ -= 2. * M_PI;
+                while (dphiJ < -M_PI) dphiJ += 2. * M_PI;
+                const float detaJ = SV_eta[svBest] - jetEta;
+                svDRJet = std::sqrt(detaJ * detaJ + dphiJ * dphiJ);
+                //-- muon 은 이 SV 에서 나온 것이므로 dR(SV, mu) 도 직접적인 handle
+                float dphiM = SV_phi[svBest] - mu.Phi();
+                while (dphiM >  M_PI) dphiM -= 2. * M_PI;
+                while (dphiM < -M_PI) dphiM += 2. * M_PI;
+                const float detaM = SV_eta[svBest] - mu.Eta();
+                svDRMu = std::sqrt(detaM * detaM + dphiM * dphiM);
+            }
+        }
 
         //---- (v17) 한 muon을 dir 하나에 통째로 fill하는 람다.
         //     "NoSelFlavIdx/"(전 muon) + prompt가 아니면 "NoSelFlavIdxFake/"에도 fill.
@@ -151,6 +230,10 @@ void track::executeEvent() {
                 const Jet &mj = rawJets[jidx];
                 FillHist(dir + "Muon_MatchedJetPt" + cat, mj.Pt(),       weight, 100, 0., 1000.);
                 FillHist(dir + "Muon_MatchedJetDR" + cat, mu.DeltaR(mj), weight, 100, 0.,   10.);
+                //---- (v20) fake.cc slim feature set 중 jet-level로 아직 없던 것들
+                FillHist(dir + "Muon_MatchedJetAbsEta" + cat, std::fabs(mj.Eta()), weight, 60, 0.,  3.0);
+                FillHist(dir + "Muon_MatchedJetMuEF"   + cat, mj.muEF(),           weight, 100, 0., 1.0);
+                FillHist(dir + "Muon_MatchedJetNMuons" + cat, mj.nMuons(),         weight,  8, -0.5, 7.5);
 
                 //---- (v13) 소속 jet의 track 다중도 (total/charged/neutral) — QCD vs TTJJ 비교용
                 //     charged/neutral branch는 Run3(2022+) NanoAODv12+에서만 정상 fill (Run2 v9엔 없음)
@@ -169,10 +252,33 @@ void track::executeEvent() {
                 };
                 fillTrk("");     // inclusive
                 fillTrk(cat);    // flavour split
+
+                //---- (v19) SV 변수 (fake.cc 와 동일 정의). binning 은 fake.cc tree 의
+                //     percentile 로 잡아 overflow 를 최소화했다.
+                //     SVN / SVMassSum 은 매칭 SV 가 없어도(0) fill — SVN 의 0 bin 이
+                //     곧 flavour 별 SV 태깅 효율이다. 나머지는 svBest>=0 일 때만.
+                auto fillSV = [&](const TString &suf) {
+                    FillHist(dir + "Muon_SVN"       + suf, svN,       weight,  10, -0.5,  9.5);
+                    FillHist(dir + "Muon_SVMassSum" + suf, svMassSum, weight, 100,  0.,  20.);
+                    if (svBest < 0) return;
+                    FillHist(dir + "Muon_SVMass"    + suf, svMass,    weight, 100,  0.,  10.);
+                    FillHist(dir + "Muon_SVPt"      + suf, svPt,      weight, 100,  0., 400.);
+                    FillHist(dir + "Muon_SVPtRatio" + suf, svPtRatio, weight,  60,  0.,   1.5);
+                    FillHist(dir + "Muon_SVDlenSig" + suf, svDlenSig, weight, 100,  0., 200.);
+                    FillHist(dir + "Muon_SVDxySig"  + suf, svDxySig,  weight, 100,  0., 200.);
+                    FillHist(dir + "Muon_SVPAngle"  + suf, svPAngle,  weight, 100,  0.,   3.1416);
+                    FillHist(dir + "Muon_SVChi2"    + suf, svChi2,    weight, 100,  0.,  20.);
+                    FillHist(dir + "Muon_SVNTracks" + suf, svNTracks, weight,  16, -0.5, 15.5);
+                    FillHist(dir + "Muon_SVDRJet"   + suf, svDRJet,   weight,  80,  0.,   0.4);
+                    FillHist(dir + "Muon_SVDRMu"    + suf, svDRMu,    weight, 100,  0.,   0.8);
+                };
+                fillSV("");      // inclusive
+                fillSV(cat);     // flavour split
             }
 
             //---- (v12) undef 트레이스: 어떤 flavour 코드/pdgId가 fall-through 되는지
-            //     (v17) pileup(_pu)이 분리됐으므로 여기 남는 건 주로 |parton|=4/5 & hadron=0
+            //     (v18) pileup(_pu = GenJet 미매칭)이 먼저 빠지므로, 여기 남는 건
+            //           GenJet은 매칭됐는데 parton 코드가 4/5 또는 0인 jet
             if (cat == "_undef") {
                 //-- 소속 jet의 raw flavour 코드 (flavCat 어느 case에도 안 걸린 값)
                 if (jidx >= 0) {
@@ -204,13 +310,13 @@ void track::executeEvent() {
             int hf  = j.hadronFlavour();
             int apf = std::abs(j.partonFlavour());
             TString fcat = "_undef";
-            if      (hf == 5)   fcat = "_b";
+            if      (j.genJetIdx() < 0) fcat = "_pu";   // (v18) 매칭 GenJet 없음 = pileup jet
+            else if (hf == 5)   fcat = "_b";
             else if (hf == 4)   fcat = "_c";
             else if (apf == 2)  fcat = "_u";
             else if (apf == 1)  fcat = "_d";
             else if (apf == 3)  fcat = "_s";
             else if (apf == 21) fcat = "_g";
-            else if (apf == 0)  fcat = "_pu";   // (v17) parton/hadron 둘 다 0 = gen 미매칭 pileup jet
             const float jpt = j.Pt();
             const int   nT  = j.nConstituents();
             const int   nC  = j.chMultiplicity();

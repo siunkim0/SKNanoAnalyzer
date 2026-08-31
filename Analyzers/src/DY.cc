@@ -53,6 +53,7 @@ void DY::initializeAnalyzer() {
 void DY::executeEvent() {
 
     AllMuons = GetAllMuons();
+    AllJets = GetAllJets();
     for (const auto &syst_dummy : *systHelper) {
         executeEventFromParameter();
     }
@@ -113,7 +114,13 @@ void DY::executeEventFromParameter() {
         // "NUM_TightID_DEN_TrackerMuons"는 예시입니다. 사용하시는 ID에 맞는 Key를 넣으세요.
         weight *= myCorr->GetMuonIDSF("NUM_TightID_DEN_TrackerMuons", selectedMuons);
         weight *= myCorr->GetMuonIDSF("NUM_TightPFIso_DEN_TightID", selectedMuons);
-        weight *= myCorr->GetMuonTriggerSF("NUM_IsoMu24_DEN_CutBasedIdTight_and_PFIsoTight", selectedMuons);
+        // Fatal for 2023, and disabled in the binary that produced the
+        // 2023_v13cmp reference. It reads the home-made MUO/muon_trig.json,
+        // which only exists for 2016-2018; for 2023 the load fails with a
+        // warning, cset_muon_trig_eff stays null, and GetMuonTriggerEff
+        // dereferences it unchecked (MyCorrection.cc:559). Keep it off for
+        // parity with 2.0.0, which cannot use this file at all.
+        // weight *= myCorr->GetMuonTriggerSF("NUM_IsoMu24_DEN_CutBasedIdTight_and_PFIsoTight", selectedMuons);
         
         // 3. Pileup Weight
         // nTrueInt는 시뮬레이션된 실제 Pileup 수입니다.
@@ -124,5 +131,41 @@ void DY::executeEventFromParameter() {
     float dilepton_mass = (selectedMuons[0] + selectedMuons[1]).M();
 
     FillHist(this_syst + "/DileptonMass", dilepton_mass, weight, 3000, 0., 3000.);
+
+    FillHist(this_syst + "/Muon1Pt", selectedMuons[0].Pt(), weight, 200, 0., 200.);
+    FillHist(this_syst + "/Muon2Pt", selectedMuons[1].Pt(), weight, 200, 0., 200.);
+    FillHist(this_syst + "/Muon1Eta", selectedMuons[0].Eta(), weight, 48, -2.4, 2.4);
+    FillHist(this_syst + "/Muon2Eta", selectedMuons[1].Eta(), weight, 48, -2.4, 2.4);
+
+    // Jets. Everything below is after the last cut, so it cannot move the
+    // cutflow -- that is what makes this comparable to the previous round.
+    // The enum overload, not the TString one: an unrecognised id string calls
+    // exit(ENODATA) in Jet::PassID instead of failing to compile.
+    RVec<Jet> jets = SelectJets(AllJets, Jet::JetID::TIGHT, 30., 2.4);
+    jets = JetsVetoLeptonInside(jets, RVec<Electron>{}, selectedMuons, 0.4);
+
+    FillHist(this_syst + "/NJet", jets.size(), weight, 10, 0., 10.);
+
+    if (!jets.empty()) {
+        // GetAllJets() already applied JEC and (MC only) JER smearing, so Pt()
+        // here is the nominal corrected pt. SelectJets does not sort, so take
+        // the max rather than assuming jets[0] leads.
+        float lead_pt = 0.;
+        float lead_nano = 0.;
+        for (const auto &jet : jets) {
+            // Jet::Pt() comes off the TLorentzVector as a double, so pin the
+            // template argument rather than letting max() go ambiguous.
+            lead_pt = max<float>(lead_pt, jet.Pt());
+            lead_nano = max<float>(lead_nano, jet.GetOriginalPt());
+        }
+        FillHist(this_syst + "/LeadJetPt", lead_pt, weight, 300, 0., 300.);
+
+        // Control: stored nanoAOD Jet_pt, no JEC and no JER. 2.0.0 seeds the
+        // JER smearing from PuppiMET_pt where this version uses MET_pt, so
+        // LeadJetPt cannot match event by event in MC. This value is free of
+        // that -- though the set it maxes over is not, since the 30 GeV cut is
+        // applied to the smeared pt.
+        FillHist(this_syst + "/LeadJetPtNano", lead_nano, weight, 300, 0., 300.);
+    }
 }
 

@@ -413,6 +413,27 @@ void closnff::executeEvent() {
 // 모델이 학습한 입력과 정의가 한 글자도 달라선 안 되기 때문이다
 // (대표 SV = dlenSig 최대, jet 축 기준 dR < 0.4 매칭).
 //==============================================================
+// source jet flavour -> fake.cc 가 쓰는 것과 같은 5-class 정수 코드
+//   0=b 1=c 2=uds 3=g 4=pileup, -1=source jet 없음(jet-less), -2=DATA
+// fake::FlavorTag + fake::FlavorCode 를 그대로 옮겼다. 우선순위가 중요하다:
+// pileup(genJetIdx<0) 을 hadronFlavour 보다 FIRST 로 본다 — 공식 코드
+// MeasFakeRateV4::getMotherJetFlavour 가 그렇게 하고 fake.cc 도 그렇게 한다.
+// 하나라도 어긋나면 per-event flavour 분해를 per-muon 쪽과 비교할 수 없다.
+//==============================================================
+int closnff::FlavorCode(const Jet *jet) const {
+    if (IsDATA) return -2;
+    if (!jet)   return -1;                     // jetIdx 가 없거나 컬렉션에서 못 찾음
+    if (jet->genJetIdx() < 0) return 4;        // pileup, flavour 보다 먼저
+    const int hf = jet->hadronFlavour();
+    if (hf == 5) return 0;
+    if (hf == 4) return 1;
+    const int ap = abs(jet->partonFlavour());
+    if (ap == 21) return 3;
+    if (ap == 1 || ap == 2 || ap == 3) return 2;
+    return -1;
+}
+
+//==============================================================
 void closnff::fillMuonSlot(int slot, const Muon *mu) {
 
     const TString p = Form("mu%d_", slot);
@@ -515,6 +536,7 @@ void closnff::fillMuonSlot(int slot, const Muon *mu) {
     SetBranch(TREE, p + "miniiso",    mu ? mu->MiniPFRelIso() : FSENT);
     SetBranch(TREE, p + "sip3d",      mu ? mu->SIP3D() : FSENT);
     SetBranch(TREE, p + "hasJet",     (bool)(mj != nullptr));
+    SetBranch(TREE, p + "flavor",     mu ? FlavorCode(mj) : ISENT);
 
     SetBranch(TREE, p + "jet_pt",      jetPt);
     SetBranch(TREE, p + "jet_eta",     jetEta);
@@ -653,6 +675,7 @@ void closnff::fillElectronSlot(int slot, const Electron *el) {
     SetBranch(TREE, p + "sip3d",      el ? el->SIP3D() : FSENT);
     SetBranch(TREE, p + "mvanoiso",   el ? el->MvaNoIso() : FSENT);
     SetBranch(TREE, p + "hasJet",     (bool)(mj != nullptr));
+    SetBranch(TREE, p + "flavor",     el ? FlavorCode(mj) : ISENT);
 
     SetBranch(TREE, p + "jet_pt",      jetPt);
     SetBranch(TREE, p + "jet_eta",     jetEta);

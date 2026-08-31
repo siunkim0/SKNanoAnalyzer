@@ -132,6 +132,11 @@ public:
     bool PassElectronWP(const Electron &el, const TString &wp) const; // elecfake.cc
     bool PassVetoMapJet(const Jet &jet, const RVec<Muon> &muons) const;
 
+    //==== source jet flavour -> fake.cc 와 완전히 같은 5-class 정수 코드.
+    //==== 공유하지 않고 복사한 이유는 PassMuonWP 과 같다: 두 analyzer 는 framework
+    //==== 와는 달라져도 서로와는 절대 달라지면 안 된다.
+    int FlavorCode(const Jet *jet) const;
+
     //==== ClosFakeRate::configureChargeOf 와 동일: (ss1, ss2, os) 로 정렬
     std::tuple<Muon, Muon, Muon> configureChargeOf(const RVec<Muon> &muons) const;
 
