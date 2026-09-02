@@ -61,6 +61,12 @@ void fake::initializeAnalyzer() {
 
     myCorr = new MyCorrection(DataEra, DataPeriod, IsDATA ? DataStream : MCSample, IsDATA);
 
+    //==== away jet b-tag WP (DeepJet Medium). closnff.cc 와 같은 호출이라
+    //==== 두 analyzer 의 b-tagging 기준이 어긋날 수 없다. 이벤트마다
+    //==== correctionlib 을 두드리지 않도록 여기서 한 번만 받아 둔다.
+    bWPMedium = myCorr->GetBTaggingWP(JetTagging::JetFlavTagger::DeepJet,
+                                      JetTagging::JetFlavTaggerWP::Medium);
+
     //==== flavor BDT 학습용 flat ntuple (loose muon 한 개당 한 줄)
     if (MakeTree) NewTree("mu");
 }
@@ -525,6 +531,7 @@ void fake::fillTreeRow(Event &ev, float evtSF) {
 
     //==== away jet: 가장 느슨한 30 GeV 로 열어 두고 40/60 은 플래그로 남긴다
     int nJet25 = 0, nJet30 = 0, nJet40 = 0, nJet60 = 0;
+    int nAway40 = 0, nAwayB40 = 0;   // Central away jet 개수 / 그 중 b-tag 개수
     bool hasAway30 = false, hasAway40 = false, hasAway60 = false;
     float awayJetPt = -999., awayJetDR = -999., awayJetDPhi = -999., HT = 0.;
     for (const auto &jet : jets) {
@@ -536,6 +543,9 @@ void fake::fillTreeRow(Event &ev, float evtSF) {
             nJet40++;
             if (away) {
                 hasAway40 = true;
+                nAway40++;
+                if (jet.GetBTaggerResult(JetTagging::JetFlavTagger::DeepJet)
+                    > bWPMedium) nAwayB40++;
                 if (awayJetPt < 0.) {   // jets 는 pT 내림차순 → 첫 번째가 leading
                     awayJetPt   = jet.Pt();
                     awayJetDR   = jet.DeltaR(mu);
@@ -817,6 +827,8 @@ void fake::fillTreeRow(Event &ev, float evtSF) {
     SetBranch(t, "ev_awayjet_pt",   awayJetPt);
     SetBranch(t, "ev_awayjet_dr",   awayJetDR);
     SetBranch(t, "ev_awayjet_dphi", awayJetDPhi);
+    SetBranch(t, "ev_nawayjet40",   nAway40);
+    SetBranch(t, "ev_nawayjetb40",  nAwayB40);
     SetBranch(t, "ev_nPV",          ev.nPV());
     SetBranch(t, "ev_nPVsGood",     ev.nPVsGood());
     SetBranch(t, "ev_rho",          fixedGridRhoFastjetAll);

@@ -146,9 +146,91 @@
 #       elecfake.cc  electron loose + muon veto
 #     ** 이전 배치는 condor_rm 으로 죽이고 아래를 다시 돌려야 한다 — 중간에
 #        rebuild 가 들어갔으므로 그대로 두면 한 hadd 안에 두 WP 이 섞인다. **
-for ERA in 2022 2022EE 2023 2023BPix; do
-SKNano.py -a fake    -i 'QCD_Pt-*_MuEnriched' -e $ERA -n 40 --userflags MakeTree --tag nff
-SKNano.py -a fake    -i TTLJ_powheg           -e $ERA -n 40 --userflags MakeTree --tag nff
-SKNano.py -a closnff -i TTLL_powheg           -e $ERA -n 40 --tag clos
-SKNano.py -a closnff -i TTLJ_powheg           -e $ERA -n 40 --tag clos
+#     (끝남 — RESULTS.md 4h. 다시 돌리지 말 것.)
+#for ERA in 2022 2022EE 2023 2023BPix; do
+#SKNano.py -a fake    -i 'QCD_Pt-*_MuEnriched' -e $ERA -n 40 --userflags MakeTree --tag nff
+#SKNano.py -a fake    -i TTLJ_powheg           -e $ERA -n 40 --userflags MakeTree --tag nff
+#SKNano.py -a closnff -i TTLL_powheg           -e $ERA -n 40 --tag clos
+#SKNano.py -a closnff -i TTLJ_powheg           -e $ERA -n 40 --tag clos
+#done
+
+# --- nffdata (2026-08-27): neural fake factor 를 DATA 에서 재기 위한 ntuple.
+#     지금까지의 nff 스터디는 전부 MC (QCD -> TTLJ) 라서, sv3 가 데이터에서도
+#     되는지는 확인된 적이 없다. RESULTS.md 4c/4d/4f 참조.
+#
+#     tag 만 다르고 analyzer 는 nff 와 완전히 같다 (fake.cc 수정 없음):
+#     fillTreeRow 는 이미 DATA 에서 돌고 (w=1, isPrompt=false, flavor=-2),
+#     fillZEnriched 도 DATA/MC 양쪽에서 돌기 때문에, 이 job 한 세트로
+#       - tree "mu"                  -> neural FR 학습용
+#       - {path}/MeasReg/...         -> binned data FR (Gate 1 의 비교 대상)
+#       - {path}/ZEnriched/mll       -> prescale normalization scale
+#     이 한꺼번에 나온다.
+#
+#     prompt 제거는 Tools/fakerate_data_pre.py 와 같은 방식:
+#       scale = N_data(Z) / N_MC(Z)  (trigger path 별),
+#       FR = [T_data - scale*T_prompt] / [L_data - scale*L_prompt]
+#     DYJets / DYJets10to50 / WJets 가 그 prompt MC 다. MC 의 fake 성분은
+#     빼면 안 된다 (데이터의 fake 에 이미 들어있다).
+#
+#     2016 두 era 만 먼저: 그 두 개만 histogram level 데이터 측정이 이미
+#     돌아가 있어서 fr/fakerate_muon_{2016pre,2016post}.json 의
+#     `fakerate_muon_Central` 로 정확한 cross-check 가 된다.
+#
+#     ** DoubleMuon 은 period 별로 나오므로 hadd 로 DoubleMuon.root 하나로
+#        합쳐야 한다. hadd -j 8 은 8 GB cgroup 에서 죽는다 (elecfake 때 그랬다,
+#        RESULTS.md 4e) — 직렬로, condor 밖에서. 그리고 skim 의 glob 은 반드시
+#        "DoubleMuon.root" 여야 한다; "DoubleMuon*.root" 로 하면 합친 파일과
+#        period 파일이 둘 다 잡혀서 모든 row 가 두 번 세어진다. **
+#     prompt MC 목록은 공식과 맞췄다 (aa/scripts/submission/MeasFakeRate.sh:27-29:
+#     DYJets, WJets, TTLJ_powheg, TTLL_powheg + SampleLists/Run2NanoV9/DiLepton.txt).
+#     Tools/fakerate_data_pre.py 는 DY+WJets 만 뺐고, 그것이 우리 data FR 이
+#     공식 맵보다 높은 이유다: Mu17 영역에서 prompt 를 ~3% 덜 빼면 prompt 가
+#     tight data 의 73-82% 인 마지막 conePt bin 에서 25% 차이로 증폭된다.
+#     RESULTS.md 4j 참조.
+#     2016preVFP / 2016postVFP 는 이미 돌았다 (RESULTS.md 4j). 남은 두 era 만.
+#     주의 1: 2018 의 DoubleMuon_E / _F 는 ForSNU json 의 path 가 비어 있다
+#             (2018 실제 period 는 A-D). 빈 출력이 나오는 건 정상이고 hadd 에서
+#             무시하면 된다.
+#     주의 2: 2017/2018 DoubleMuon 은 2016 보다 훨씬 크다 (2018 period D 하나가
+#             파일 2059개). hadd 는 반드시 직렬로, condor 밖에서.
+for ERA in 2017 2018; do
+SKNano.py -a fake -i DoubleMuon   -e $ERA -n 40 --userflags MakeTree --tag nffdata
+# prompt MC: 공식과 동일한 13개
+SKNano.py -a fake -i DYJets       -e $ERA -n 40 --userflags MakeTree --tag nffdata
+SKNano.py -a fake -i DYJets10to50 -e $ERA -n 40 --userflags MakeTree --tag nffdata
+SKNano.py -a fake -i WJets        -e $ERA -n 40 --userflags MakeTree --tag nffdata
+SKNano.py -a fake -i TTLJ_powheg  -e $ERA -n 40 --userflags MakeTree --tag nffdata
+SKNano.py -a fake -i TTLL_powheg  -e $ERA -n 40 --userflags MakeTree --tag nffdata
+SKNano.py -a fake -i WW_pythia    -e $ERA -n 40 --userflags MakeTree --tag nffdata
+SKNano.py -a fake -i WZ_pythia    -e $ERA -n 40 --userflags MakeTree --tag nffdata
+SKNano.py -a fake -i ZZ_pythia    -e $ERA -n 40 --userflags MakeTree --tag nffdata
+SKNano.py -a fake -i SingleTop_sch_Lep            -e $ERA -n 40 --userflags MakeTree --tag nffdata
+SKNano.py -a fake -i SingleTop_tch_top_Incl       -e $ERA -n 40 --userflags MakeTree --tag nffdata
+SKNano.py -a fake -i SingleTop_tch_antitop_Incl   -e $ERA -n 40 --userflags MakeTree --tag nffdata
+SKNano.py -a fake -i SingleTop_tW_top_NoFullyHad     -e $ERA -n 40 --userflags MakeTree --tag nffdata
+SKNano.py -a fake -i SingleTop_tW_antitop_NoFullyHad -e $ERA -n 40 --userflags MakeTree --tag nffdata
 done
+
+# --- nffb (2026-09-02): DY / W / DY+b 로 closure test 를 넓히기 위한 ntuple.
+#     지금까지 closure 는 QCD -> TTLJ (per-muon) 와 TTLL (trilepton) 뿐이라
+#     binned map 의 실패와 sv3/sv3m 의 우세가 ttbar 고유의 사실인지 알 수 없다.
+#     DY = 낮은 HT / light-gluon jet 환경, W = 진짜 neutrino 하나,
+#     DY+b = top decay kinematics 없는 b flavour fake.
+#
+#     tag 를 nff 와 나눈 이유: 이 배치부터 fake.cc 가 away jet 관련 브랜치
+#     두 개를 더 뱉는다 (Central 정의 pT>40 && dR(mu,jet)>0.7 기준):
+#       ev_nawayjet40   away jet 개수
+#       ev_nawayjetb40  그 중 DeepJet Medium b-tag 개수  (closnff.cc 와 같은 WP)
+#     DY+b 영역은 ev_nawayjetb40 == 1 로 offline 에서 자른다.
+#     기존 nff (QCD/TTLJ) 트리에는 이 브랜치가 없으므로 한 디렉토리에 섞지 않는다.
+#     bdtflav -> bdtflav2 -> nff 와 같은 이유.
+#
+#     Run2 DY/WJets 는 {era}_nffdata 에 이미 있지만 그건 prompt subtraction 용
+#     (skim 이 isPrompt 만 남기고 weight 부호를 뒤집는다) + away b 브랜치가 없다.
+#     8 era x 3 sample = 24 개, /gv0 에 약 10 GB.
+#     출력: /gv0/Users/snuintern2/SKNanoOutput/fake/MakeTree/{era}_nffb/
+#for ERA in 2016preVFP 2016postVFP 2017 2018 2022 2022EE 2023 2023BPix; do
+#SKNano.py -a fake -i DYJets       -e $ERA -n 40 --userflags MakeTree --tag nffb
+#SKNano.py -a fake -i DYJets10to50 -e $ERA -n 40 --userflags MakeTree --tag nffb
+#SKNano.py -a fake -i WJets        -e $ERA -n 40 --userflags MakeTree --tag nffb
+#done

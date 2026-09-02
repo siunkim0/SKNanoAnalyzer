@@ -94,6 +94,10 @@ public:
     RVec<Gen> gens;                      // prompt / fake 구분용 (MC only)
     RVec<GenJet> genJets;                // pileup jet ID SF 용 (MC only)
 
+    // away jet b-tagging 기준 (DeepJet Medium). era 별 값이라 correctionlib
+    // 조회가 필요하므로 initializeAnalyzer 에서 한 번만 받아 캐시한다.
+    float bWPMedium = 1.;
+
     // Helper functions
     bool PassMuonWP(const Muon &mu, const TString &wp) const;
     bool PassElectronVeto(const Electron &el) const;
