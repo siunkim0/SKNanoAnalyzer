@@ -703,6 +703,37 @@ void fake::fillTreeRow(Event &ev, float evtSF) {
     const float wMu8  = passMu8  ? commonW * (IsDATA ? 1.f : ev.GetTriggerLumi("HLT_Mu8_TrkIsoVVL"))  : 0.f;
     const float wMu17 = passMu17 ? commonW * (IsDATA ? 1.f : ev.GetTriggerLumi("HLT_Mu17_TrkIsoVVL")) : 0.f;
 
+    //==== muR/muF, parton shower 변주 weight. 전부 w_var / w_nominal 이라 그대로
+    //==== 곱하면 되고, 변주가 없는 샘플(pythia8 QCD, DATA)은 1 로 남는다.
+    //====
+    //==== AnalyzerCore::GetScaleVariation() 은 쓰지 않는다. 그 함수는 nominal 이
+    //==== 빠진 8-entry 규약을 가정하는데, 여기서 쓰는 NanoAOD (Run2 v9p1 /
+    //==== Run3 v13p1) 는 TTLJ_powheg 8 era 전부 nLHEScaleWeight == 9 이고
+    //==== nominal 이 [4] 에 들어 있다. 그래서 index 4 이상이 한 칸씩 밀려서
+    //==== GetScaleVariation(up, nom) 이 muF up 이 아니라 nominal 을 돌려준다.
+    //==== 여기서는 raw 벡터를 그대로 남기고 해석은 offline 에서 한다:
+    //====   [0] R.5 F.5  [1] R.5 F1  [2] R.5 F2  [3] R1 F.5  [4] R1 F1 (nominal)
+    //====   [5] R1  F2   [6] R2  F.5 [7] R2  F1  [8] R2 F2
+    float wScale[9];
+    for (int i = 0; i < 9; i++) wScale[i] = 1.f;
+    if (!IsDATA && nLHEScaleWeight == 9) {
+        for (int i = 0; i < 9; i++) wScale[i] = LHEScaleWeight[i];
+    } else if (!IsDATA && nLHEScaleWeight == 8) {
+        //==== nominal 이 빠진 규약이면 [4] 자리에 1 을 끼워 9-entry 로 맞춘다.
+        for (int i = 0; i < 4; i++) wScale[i]     = LHEScaleWeight[i];
+        for (int i = 4; i < 8; i++) wScale[i + 1] = LHEScaleWeight[i];
+    }
+
+    //==== PSWeight: [0] ISR=2 FSR=1, [1] ISR=1 FSR=2, [2] ISR=0.5 FSR=1,
+    //==== [3] ISR=1 FSR=0.5 (NanoAOD doc string, 8 era 전부 같음을 확인).
+    float wIsrUp = 1.f, wIsrDn = 1.f, wFsrUp = 1.f, wFsrDn = 1.f;
+    if (!IsDATA && nPSWeight == 4) {
+        wIsrUp = PSWeight[0];
+        wFsrUp = PSWeight[1];
+        wIsrDn = PSWeight[2];
+        wFsrDn = PSWeight[3];
+    }
+
     //==== 아래 SetBranch 블록은 반드시 무조건부 직선 코드여야 한다 (주의 2 참고)
     const TString t = "mu";
 
@@ -719,6 +750,19 @@ void fake::fillTreeRow(Event &ev, float evtSF) {
     SetBranch(t, "w_mu8",       wMu8);
     SetBranch(t, "w_mu17",      wMu17);
     SetBranch(t, "mcweight",    IsDATA ? 1.f : (float)MCweight());
+    SetBranch(t, "w_scale0",    wScale[0]);
+    SetBranch(t, "w_scale1",    wScale[1]);
+    SetBranch(t, "w_scale2",    wScale[2]);
+    SetBranch(t, "w_scale3",    wScale[3]);
+    SetBranch(t, "w_scale4",    wScale[4]);
+    SetBranch(t, "w_scale5",    wScale[5]);
+    SetBranch(t, "w_scale6",    wScale[6]);
+    SetBranch(t, "w_scale7",    wScale[7]);
+    SetBranch(t, "w_scale8",    wScale[8]);
+    SetBranch(t, "w_isr_up",    wIsrUp);
+    SetBranch(t, "w_isr_dn",    wIsrDn);
+    SetBranch(t, "w_fsr_up",    wFsrUp);
+    SetBranch(t, "w_fsr_dn",    wFsrDn);
     SetBranch(t, "run",         ev.run());
     SetBranch(t, "lumi",        ev.lumi());
     SetBranch(t, "evt",         ev.event());

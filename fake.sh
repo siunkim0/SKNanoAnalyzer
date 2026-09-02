@@ -234,3 +234,25 @@ done
 #SKNano.py -a fake -i DYJets10to50 -e $ERA -n 40 --userflags MakeTree --tag nffb
 #SKNano.py -a fake -i WJets        -e $ERA -n 40 --userflags MakeTree --tag nffb
 #done
+
+# --- nffs (2026-09-02): ttbar 의 muR/muF, ISR/FSR 를 흔들었을 때에도 ML fake
+#     rate 가 닫히는지 보기 위한 배치. 지금까지의 closure (RESULTS.md 4b/4c/4f)
+#     는 전부 TTLJ_powheg 의 nominal scale 하나에서만 잰 것이라, sv3 의 우세가
+#     방법의 성질인지 ttbar tune 하나의 성질인지 구분이 안 된다.
+#
+#     tag 를 nff/nffb 와 나눈 이유: fillTreeRow 가 branch 13 개를 더 뱉는다.
+#       w_scale0..8   LHEScaleWeight raw 9-entry (nominal 은 [4], 값 1)
+#       w_isr_up/dn, w_fsr_up/dn   PSWeight
+#     전부 w_var / w_nominal 이라 offline 에서 weight 에 그냥 곱하면 된다.
+#     AnalyzerCore::GetScaleVariation() 은 nominal 이 빠진 8-entry 규약을
+#     가정해서 여기 NanoAOD (8 era 전부 nLHEScaleWeight == 9) 에서는 "up" 이
+#     한 칸씩 밀린다. 그래서 fake.cc 가 raw 벡터를 직접 남긴다.
+#
+#     QCD 는 넣지 않는다: pythia8 이라 LHEScaleWeight 브랜치 자체가 없고
+#     (nPSWeight == 1), fake rate 를 재는 쪽은 어차피 흔들 수 없다. 그게 오히려
+#     data 에서 잰 fake rate 와 같은 상황이라 이 테스트에 맞다.
+#
+#     8 era x 1 sample. 출력: /gv0/Users/snuintern2/SKNanoOutput/fake/MakeTree/{era}_nffs/
+#for ERA in 2016preVFP 2016postVFP 2017 2018 2022 2022EE 2023 2023BPix; do
+#SKNano.py -a fake -i TTLJ_powheg -e $ERA -n 40 --userflags MakeTree --tag nffs
+#done
