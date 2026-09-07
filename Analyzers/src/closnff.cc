@@ -39,6 +39,17 @@ void closnff::initializeAnalyzer() {
                        "HLT_Mu8_TrkIsoVVL_Ele23_CaloIdL_TrackIdL_IsoVL_DZ"};
     }
 
+    //==== 2Mu 채널의 trigger: unprescaled single muon. bkg.cc:14-22 와 동일하게
+    //==== 맞춰야 bkg.cc 영역이 offline slice 로 정확히 재현된다.
+    if (DataEra == "2016preVFP" || DataEra == "2016postVFP") {
+        SglMuTriggers = {"HLT_IsoMu24", "HLT_IsoTkMu24"};
+    } else if (DataEra == "2017") {
+        SglMuTriggers = {"HLT_IsoMu27"};
+        sgl_lead_mu_pt = 29.;
+    } else {
+        SglMuTriggers = {"HLT_IsoMu24"};
+    }
+
     //==== loose electron WP 의 raw MVANoIso 컷 (elecfake.cc 와 같은 값)
     if (Run == 2) { looseMvaIB = 0.985; looseMvaOB = 0.96; looseMvaEC = 0.85; }
     else          { looseMvaIB = 0.8;   looseMvaOB = 0.5;  looseMvaEC = -0.8; }
@@ -62,6 +73,15 @@ void closnff::initializeAnalyzer() {
     } else {
         cuts.jet_eta_max = 2.5;
     }
+
+    //==== DY closure 용 userflag. ttbar 의 Fig. 50 영역은 jet>=2 && b-jet>=1
+    //==== 인데 DY 에는 b 가 거의 없어 그대로 쓰면 통계가 남지 않는다.
+    //==== ev_njet / ev_nbjet 는 이미 브랜치로 나가므로 컷을 offline 으로
+    //==== 옮긴다 (DY = 컷 없음, DY+b = ev_nbjet >= 1). flag 가 없으면 기존
+    //==== 동작 그대로 — TTLL/TTLJ 출력은 한 비트도 달라지지 않는다.
+    OpenJet = HasFlag("OpenJet");
+    Skip2Mu = HasFlag("Skip2Mu");
+    if (OpenJet) { cuts.n_jet_min = 0; cuts.n_bjet_min = 0; }
 
     myCorr = new MyCorrection(DataEra, DataPeriod, IsDATA ? DataStream : MCSample, IsDATA);
 
@@ -182,15 +202,31 @@ void closnff::executeEvent() {
 
     //==== Step 3: 채널 판정. multiplicity 가 배타적이라 한 이벤트는 최대 한 채널.
     //   veto muon == loose muon 이므로 (fake.cc 와 같은 WP) muon 쪽은 크기만 본다.
+    //   2Mu 는 veto electron 0 개를 요구하므로 1E2Mu (veto 1 개) 와 겹치지 않고,
+    //   muon 개수가 달라 3Mu 와도 겹치지 않는다. 기존 코드 0/1 은 그대로 두어
+    //   이미 만들어진 clos / closdy 트리와 npz 가 전부 유효하게 남는다.
+    const bool is2Mu   = (looseMuons.size() == 2 && vetoElectrons.size() == 0);
     const bool is3Mu   = (looseMuons.size() == 3 && vetoElectrons.size() == 0);
     const bool is1E2Mu = (looseMuons.size() == 2 && vetoElectrons.size() == 1
                                                  && looseElectrons.size() == 1);
-    if (!is3Mu && !is1E2Mu) return;
-    const int channel = is3Mu ? 0 : 1;
+    if (!is2Mu && !is3Mu && !is1E2Mu) return;
+    //==== --userflags Skip2Mu: 2Mu 행을 버린다. 3Mu / 1E2Mu 출력은 그대로다.
+    if (Skip2Mu && is2Mu) return;
+    const int channel = is3Mu ? 0 : (is1E2Mu ? 1 : 2);
 
     //==== Step 4: trigger (채널마다 다르다)
+    //   FR 측정 경로(Mu8/Mu17)는 **아무것도 걸지 않고** 매 row 기록만 한다.
+    //   이 영역을 정의하지는 않지만, 측정 영역과 적용 영역의 trigger 조성 차이를
+    //   나중에 숫자로 재려면 필요하다. SetBranch 는 조건부로 건너뛸 수 없으므로
+    //   채널과 무관하게 계산한다.
+    const bool passMu8  = ev.PassTrigger("HLT_Mu8_TrkIsoVVL")
+                          && looseMuons.at(0).Pt() > 10.;
+    const bool passMu17 = ev.PassTrigger("HLT_Mu17_TrkIsoVVL")
+                          && looseMuons.at(0).Pt() > 20.;
+
     bool passTrig = false;
-    for (const auto &trig : (is3Mu ? DblMuTriggers : EMuTriggers))
+    for (const auto &trig : (is3Mu ? DblMuTriggers
+                                   : (is1E2Mu ? EMuTriggers : SglMuTriggers)))
         if (ev.PassTrigger(trig)) { passTrig = true; break; }
     if (!passTrig) return;
 
@@ -199,6 +235,12 @@ void closnff::executeEvent() {
         if (!(looseMuons.at(0).Pt() > cuts.lead_mu_pt)) return;
         if (!(looseMuons.at(1).Pt() > cuts.sub_mu_pt))  return;
         if (!(looseMuons.at(2).Pt() > cuts.sub_mu_pt))  return;
+    } else if (is2Mu) {
+        //==== bkg.cc:201 과 같은 trigger-safe 문턱 (IsoMu24 는 26, IsoMu27 은 29).
+        //==== 이 분기가 없으면 아래 else 로 떨어져 looseElectrons.at(0) 에서
+        //==== out-of-range 로 죽는다.
+        if (!(looseMuons.at(0).Pt() > sgl_lead_mu_pt)) return;
+        if (!(looseMuons.at(1).Pt() > cuts.sub_mu_pt)) return;
     } else {
         //==== 비대칭 leg 두 개의 OR (EMu trigger 의 두 경로에 대응). mu2 는
         //==== object 문턱(10) 말고 따로 컷이 없다 — ClosFakeRate 와 같다.
@@ -302,6 +344,28 @@ void closnff::executeEvent() {
         for (size_t i = 0; i < scaled.size(); i++)
             if (fabs(scaled.at(i).Phi() - nonprompt.Phi()) < 1e-6 &&
                 fabs(scaled.at(i).Eta() - nonprompt.Eta()) < 1e-6) nonpromptSlot = (int)i + 1;
+    } else if (is2Mu) {
+        //   2Mu: OS + M(mumu) > 12. 1E2Mu 와 같은 모양이고 같은 상수
+        //   (cuts.pair_mass_min = 12) 를 쓴다 — bkg.cc 의 mll > 20 이 아니라
+        //   AN 의 12 다. mll>20 / Z veto / MET / jet 은 여전히 offline 이라
+        //   bkg.cc 영역을 slice 로 재현할 수 있다.
+        //   configureChargeOf 는 muons.at(0..2) 를 무조건 참조하고
+        //   |q1+q2+q3|==1 을 전제로 순서를 정하므로 여기서 부르면 안 된다.
+        if (!(scaled.at(0).Charge() + scaled.at(1).Charge() == 0)) return;
+        pair_emu = scaled.at(0) + scaled.at(1);   // -> pair_mass / pair_pt
+        if (!(pair_emu.M() > cuts.pair_mass_min)) return;
+        //   m3l 은 세 번째 렙톤이 없어 기본 Particle 그대로 (M() = 0, sentinel 아님).
+
+        //   fake 후보. 3Mu 와 마찬가지로 **data 에서도 정의 가능해야** 하므로
+        //   gen 을 쓰지 않는다: fail 이 하나면 그 muon, 아니면 subleading.
+        const bool t0 = PassMuonWP(looseMuons.at(0), "tight");
+        const bool t1 = PassMuonWP(looseMuons.at(1), "tight");
+        const int  k  = (t0 && !t1) ? 1 : ((!t0 && t1) ? 0 : 1);
+        nonpromptPt  = scaled.at(k).Pt();         // 스케일된 = conePt
+        nonpromptEta = scaled.at(k).Eta();
+        nonpromptPhi = scaled.at(k).Phi();
+        nonpromptFlavor = 0;
+        nonpromptSlot   = k + 1;
     } else {
         //   1E2Mu: OS muon pair 하나, M > 12. Z veto 도 두 번째 pair 도 없다.
         if (!(scaled.at(0).Charge() + scaled.at(1).Charge() == 0)) return;
@@ -333,6 +397,8 @@ void closnff::executeEvent() {
     //   closure 이므로 양쪽에 똑같이 곱해져 상쇄된다). top pT reweight 은
     //   ClosFakeRate 가 적용하지 않으므로 여기서도 weight 에 넣지 않고
     //   w_toppt 로 따로 남겨 offline 에서 선택할 수 있게 한다.
+    //   세 채널의 trigger 가 모두 unprescaled 이므로 GetTriggerLumi("Full") 이
+    //   맞고 절대 수율도 물리적인 이벤트 수다.
     float weight = 1., wTopPt = 1.;
     if (!IsDATA) {
         weight  = MCweight() * ev.GetTriggerLumi("Full");
@@ -367,6 +433,10 @@ void closnff::executeEvent() {
     SetBranch(TREE, "weight",   weight);
     SetBranch(TREE, "w_toppt",  wTopPt);
     SetBranch(TREE, "mcweight", IsDATA ? 1.f : MCweight());
+    //   2Mu 채널의 trigger 이자, 어느 채널에서든 경로 분해를 offline 에 남기기
+    //   위해 매 row 무조건 쓴다 (fake.cc:748-749 와 같은 이유).
+    SetBranch(TREE, "pass_mu8",  passMu8);
+    SetBranch(TREE, "pass_mu17", passMu17);
 
     SetBranch(TREE, "ev_met",     METv.Pt());
     SetBranch(TREE, "ev_met_phi", METv.Phi());
@@ -456,6 +526,10 @@ void closnff::fillMuonSlot(int slot, const Muon *mu) {
 
     float jetPt = FSENT, jetEta = FSENT, jetAbsEta = FSENT, jetDR = FSENT;
     float jetPtRatio = FSENT, jetMuEF = FSENT, jetDeepB = FSENT;
+    //==== c-arm 입력. 산술은 fake.cc:593-607 과 글자 그대로 같아야 tree 와
+    //     nff parquet 이 어긋나지 않는다 (어긋나면 per-muon closure 와
+    //     trilepton closure 를 비교할 수 없다).
+    float jetPtRel = FSENT, jetDeepCvB = FSENT, jetDeepCvL = FSENT;
     int   jetNConst = ISENT, jetNMuons = ISENT;
     int   jetChMult = ISENT, jetNeMult = ISENT;   // Run3 전용
     if (mj) {
@@ -468,6 +542,13 @@ void closnff::fillMuonSlot(int slot, const Muon *mu) {
         jetNConst  = mj->nConstituents();
         jetNMuons  = mj->nMuons();
         jetDeepB   = mj->GetBTaggerResult(JetTagging::JetFlavTagger::DeepJet);
+        //==== pTrel: (jet - lepton) 축에 대한 lepton 운동량의 수직 성분
+        const TVector3 axisM = mj->Vect() - mu->Vect();
+        if (axisM.Mag() > 1e-6) jetPtRel = mu->Vect().Perp(axisM);
+        const pair<float,float> cvalsM =
+            mj->GetCTaggerResult(JetTagging::JetFlavTagger::DeepJet);
+        jetDeepCvB = cvalsM.first;
+        jetDeepCvL = cvalsM.second;
         //==== charged / neutral multiplicity 는 Run3 (NanoAODv12+) 전용.
         //     Run2 v9 에는 branch 자체가 없고 Jet 생성자도 이 두 멤버를
         //     초기화하지 않아 Run2 에서 읽으면 쓰레기 값이 나온다
@@ -549,6 +630,12 @@ void closnff::fillMuonSlot(int slot, const Muon *mu) {
     SetBranch(TREE, p + "jet_nemult",  jetNeMult);   // Run3 전용
     SetBranch(TREE, p + "jet_nmuons",  jetNMuons);
     SetBranch(TREE, p + "jet_deepjet_b", jetDeepB);
+    SetBranch(TREE, p + "jet_ptrel",       jetPtRel);
+    SetBranch(TREE, p + "jet_deepjet_cvb", jetDeepCvB);
+    SetBranch(TREE, p + "jet_deepjet_cvl", jetDeepCvL);
+    //==== NanoAOD Muon branch 이므로 matched jet 이 없어도 값이 있다 —
+    //     jet_ptrel 이 Run3 에서 13% NaN 인 것과 대비된다.
+    SetBranch(TREE, p + "jetPtRelv2",      mu ? mu->JetPtRelv2() : FSENT);
 
     SetBranch(TREE, p + "sv_n",       svN);
     SetBranch(TREE, p + "sv_mass",    svMass);
@@ -591,6 +678,10 @@ void closnff::fillElectronSlot(int slot, const Electron *el) {
 
     float jetPt = FSENT, jetEta = FSENT, jetAbsEta = FSENT, jetDR = FSENT;
     float jetPtRatio = FSENT, jetMuEF = FSENT, jetDeepB = FSENT;
+    //==== c-arm 입력. 산술은 fake.cc:593-607 과 글자 그대로 같아야 tree 와
+    //     nff parquet 이 어긋나지 않는다 (어긋나면 per-muon closure 와
+    //     trilepton closure 를 비교할 수 없다).
+    float jetPtRel = FSENT, jetDeepCvB = FSENT, jetDeepCvL = FSENT;
     int   jetNConst = ISENT, jetNMuons = ISENT;
     int   jetChMult = ISENT, jetNeMult = ISENT;   // Run3 전용
     if (mj) {
@@ -603,6 +694,12 @@ void closnff::fillElectronSlot(int slot, const Electron *el) {
         jetNConst  = mj->nConstituents();
         jetNMuons  = mj->nMuons();
         jetDeepB   = mj->GetBTaggerResult(JetTagging::JetFlavTagger::DeepJet);
+        const TVector3 axisE = mj->Vect() - el->Vect();
+        if (axisE.Mag() > 1e-6) jetPtRel = el->Vect().Perp(axisE);
+        const pair<float,float> cvalsE =
+            mj->GetCTaggerResult(JetTagging::JetFlavTagger::DeepJet);
+        jetDeepCvB = cvalsE.first;
+        jetDeepCvL = cvalsE.second;
         //==== charged / neutral multiplicity 는 Run3 (NanoAODv12+) 전용.
         //     Run2 v9 에는 branch 자체가 없고 Jet 생성자도 이 두 멤버를
         //     초기화하지 않아 Run2 에서 읽으면 쓰레기 값이 나온다
@@ -688,6 +785,9 @@ void closnff::fillElectronSlot(int slot, const Electron *el) {
     SetBranch(TREE, p + "jet_nemult",  jetNeMult);   // Run3 전용
     SetBranch(TREE, p + "jet_nmuons",  jetNMuons);
     SetBranch(TREE, p + "jet_deepjet_b", jetDeepB);
+    SetBranch(TREE, p + "jet_ptrel",       jetPtRel);
+    SetBranch(TREE, p + "jet_deepjet_cvb", jetDeepCvB);
+    SetBranch(TREE, p + "jet_deepjet_cvl", jetDeepCvL);
 
     SetBranch(TREE, p + "sv_n",       svN);
     SetBranch(TREE, p + "sv_mass",    svMass);

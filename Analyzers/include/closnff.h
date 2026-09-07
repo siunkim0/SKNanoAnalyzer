@@ -27,7 +27,21 @@
 //     q(mu1) + q(mu2) == 0, M(mu mu) > 12 GeV
 //     electron 은 pT > 15 (veto electron 만 pT > 10)
 //
-//   공통: jet >= 2, b-jet (DeepJet Medium) >= 1
+//   channel = 2 (2Mu, OS dimuon):
+//     loose muon 2개 == veto muon 2개, veto electron 0개
+//     **unprescaled single muon** trigger (bkg.cc 와 동일):
+//       2016 IsoMu24 + IsoTkMu24 / 2017 IsoMu27 / 그 외 IsoMu24
+//       leading pT > 26 (2017 은 29), subleading pT > 10
+//     q(mu1) + q(mu2) == 0, M(mu mu) > 12 GeV   <- cone-corrected 로 자른다
+//     Z veto / MET / jet 컷은 **없다** — offline 으로 남긴다. bkg.cc 영역은
+//     mll>20 && |mll-91.2|>15 && ev_njet>=2 && ev_met>40 slice 이고,
+//     DY+b 는 ev_nbjet>=1 이다. pair_mass / pair_pt 는 1E2Mu 와 브랜치 공유.
+//     m3l / ZCand_* / nZCand_* / pair_lowM|highM_* 는 세 번째 렙톤이 없어
+//     기본 Particle (M() = 0) 이다 — sentinel(-999) 이 아니므로 offline 은
+//     그 값이 아니라 channel 로 걸러야 한다.
+//     nonprompt_* = fail 한 muon (fail 이 하나일 때), 아니면 subleading.
+//
+//   공통: jet >= 2, b-jet (DeepJet Medium) >= 1  (userflag OpenJet 으로 끔)
 //         MET 컷 없음, MT 컷 없음, Z veto 없음
 //
 //   SR (region=0) : loose lepton 이 모두 tight       -> Observed
@@ -52,7 +66,12 @@
 //  같아서 loose WP 과 동치였다. 그래서 3Mu 의 electron veto 는 이 교체로
 //  달라지지 않는다 — 3Mu 결과가 움직이면 그건 버그다.)
 //
-// Userflags: 없음 (tree 는 항상 쓴다)
+// Userflags: OpenJet 하나만 있다 (tree 는 항상 쓴다).
+//   OpenJet 은 jet >= 2 && b-jet >= 1 를 끄고 그 판단을 offline 로 넘긴다.
+//   ttbar 의 Fig. 50 영역은 top 에 맞춰진 것이라 DY 에 그대로 쓰면
+//   b 가 거의 없어 통계가 남지 않는다. ev_njet / ev_nbjet 는 이미
+//   브랜치로 나가므로 DY = 컷 없음, DY+b = ev_nbjet >= 1 로
+//   재현된다. flag 가 없으면 기존 동작 그대로다.
 // 출력 tree "clos": 선택된 이벤트당 정확히 한 줄
 //==============================================================
 class closnff : public AnalyzerCore {
@@ -63,9 +82,25 @@ public:
     void initializeAnalyzer();
     void executeEvent();
 
+    //==== userflag. jet >= 2 / b-jet >= 1 를 끄고 offline 로 넘긴다 (위 주석).
+    bool OpenJet = false;
+    //==== 2Mu(OS dimuon) 행을 아예 쓰지 않는다. closdy/closttop/clos 에서
+    //     그 채널은 아무도 읽지 않는데 트리의 99.9% 를 차지해서
+    //     (2016preVFP: 11,847,157 / 11,857,752 행) hadd 가 8 GB cgroup 한계를
+    //     넘겨 hold 된다. closos/closdimu 는 이 flag 를 주지 않으면 되므로
+    //     기존 동작은 한 비트도 바뀌지 않는다.
+    bool Skip2Mu = false;
+
     //==== era 별 HLT 경로 (TriLeptonBase.cc 와 동일)
     RVec<TString> DblMuTriggers;   // 3Mu 채널
     RVec<TString> EMuTriggers;     // 1E2Mu 채널
+    //   2Mu 채널은 **unprescaled single muon** trigger 를 쓴다 (bkg.cc:14-22 와
+    //   글자 그대로 같다). 하나만 쏘면 되고 HLT leg 이 tight isolation 이라
+    //   사실상 언제나 prompt muon 이 쏜다 — 즉 **fake muon 에는 trigger 요구가
+    //   전혀 걸리지 않는다**. 3Mu 영역이 깨끗한 것과 같은 이유다.
+    //   prescale 이 없으므로 GetTriggerLumi("Full") 이 맞고 수율도 물리적이다.
+    RVec<TString> SglMuTriggers;   // 2Mu 채널
+    float sgl_lead_mu_pt = 26.;    // trigger-safe leading pT. 2017 은 29 (IsoMu27)
 
     //==== loose electron WP 의 raw MVANoIso 컷 (elecfake.cc 와 같은 값)
     float looseMvaIB, looseMvaOB, looseMvaEC;
