@@ -2103,6 +2103,21 @@ void AnalyzerCore::WriteHist() {
         TDirectory *this_dir = outfile->GetDirectory(this_prefix.c_str());
         if (!this_dir) outfile->mkdir(this_prefix.c_str());
         outfile->cd(this_prefix.c_str());
+        //==== MANDATORY before CloneTree: the branch addresses still point into
+        //     this_floats / this_ints / this_bools, and FillTrees() ended those
+        //     deques' lifetime (clear() + shrink_to_fit()) after the last row.
+        //     CloneTree(-1) reads every entry back THROUGH those addresses
+        //     (TTree::CopyEntries -> GetEntry -> TBranch::ReadLeavesImpl), so
+        //     without this it is a 4-byte write-after-free per branch per entry
+        //     and the heap is silently corrupted. It surfaced as
+        //     "malloc(): unaligned tcache chunk detected" inside this very
+        //     function, on some Run 3 closnff jobs only, because whether a
+        //     freed block has been handed back out is pure allocator luck.
+        //     ResetBranchAddresses() makes every leaf own its buffer again, so
+        //     the clone reads and writes memory that is actually alive. The
+        //     values written are unaffected - they come from the source
+        //     baskets either way.
+        tree->ResetBranchAddresses();
         TTree* temptree = tree->CloneTree(-1);//this is because the tree contains lot of empty disabled branch. I don't know better way to handle this, so just keep memory-consuming way for now.
         temptree->Write();
         delete temptree;

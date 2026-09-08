@@ -444,7 +444,12 @@ void closnff::executeEvent() {
     SetBranch(TREE, "ev_njet",    (int)jets.size());
     SetBranch(TREE, "ev_njet40",  nJet40);
     SetBranch(TREE, "ev_nbjet",   (int)bjets.size());
-    SetBranch(TREE, "ev_nPV",     (int)PV_npvs);
+    //==== ev.nPV() 를 써야 한다 (fake.cc:876 과 같다). loader 의 raw 멤버
+    //     PV_npvs 는 **Run 3 전용**이다 — Run 2 에서는 SKNanoLoader.cc:1408 이
+    //     PV_npvs_RunII 에 바인딩하므로 PV_npvs 는 초기화되지 않은 채로 남고,
+    //     Run 2 트리의 ev_nPV 는 프로세스마다 하나의 쓰레기 상수였다
+    //     (2017 closttop: 전 152,872 행이 0 아니면 224).
+    SetBranch(TREE, "ev_nPV",     ev.nPV());
     SetBranch(TREE, "ev_nTrueInt", IsDATA ? -1.f : ev.nTrueInt());
 
     //==== AN Fig. 50 의 관측량. 채널마다 쓰는 것이 다르고, 안 쓰는 쪽은
