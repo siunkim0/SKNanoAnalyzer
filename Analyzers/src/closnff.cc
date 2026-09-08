@@ -205,14 +205,38 @@ void closnff::executeEvent() {
     //   2Mu 는 veto electron 0 개를 요구하므로 1E2Mu (veto 1 개) 와 겹치지 않고,
     //   muon 개수가 달라 3Mu 와도 겹치지 않는다. 기존 코드 0/1 은 그대로 두어
     //   이미 만들어진 clos / closdy 트리와 npz 가 전부 유효하게 남는다.
-    const bool is2Mu   = (looseMuons.size() == 2 && vetoElectrons.size() == 0);
+    //==== 2Mu 는 전하로 두 채널로 갈린다. OS 는 channel 2 (기존), SS 는
+    //     channel 3 (신규). 전하합이 0 이냐 +-2 냐로 나뉘므로 구조적으로
+    //     배타적이고, 3Mu / 1E2Mu 와도 multiplicity 로 겹치지 않는다.
+    //
+    //     왜 userflag 가 아니라 새 channel 코드인가: flag 로 하면 같은
+    //     channel==2 가 디렉토리마다 OS 이기도 하고 SS 이기도 하게 된다.
+    //     dump_trilepton 은 디렉토리를 가로질러 glob 하고 branch 집합의
+    //     교집합을 취하므로 그 차이를 절대 알아채지 못한다 (5e 의 vintage
+    //     함정). 코드를 나누면 영원히 모호하지 않고, 한 job 이 둘 다 쓸 수도
+    //     있다. 기존 트리에는 channel 3 이 없으므로 기존 결과는 그대로다.
+    //
+    //     SS 를 여는 이유: OS dimuon 은 sideband 가 99.46% both-prompt (진짜
+    //     Z->mumu 의 **prompt** muon 이 tight isolation 을 실패한 것) 라서
+    //     구조적으로 죽었다 (DY_CLOSURE_STATUS.md 2c). Z->mumu 는 정의상
+    //     opposite-sign 이므로 same-sign 은 그 오염만 정확히 제거하고 fake
+    //     성분은 남긴다 — fake 는 prompt muon 하나 + 전하 무작위인 fake 하나다.
+    const bool is2MuOS = (looseMuons.size() == 2 && vetoElectrons.size() == 0
+                          && looseMuons.at(0).Charge()
+                             + looseMuons.at(1).Charge() == 0);
+    const bool is2MuSS = (looseMuons.size() == 2 && vetoElectrons.size() == 0
+                          && !is2MuOS);
+    const bool is2Mu   = is2MuOS || is2MuSS;
     const bool is3Mu   = (looseMuons.size() == 3 && vetoElectrons.size() == 0);
     const bool is1E2Mu = (looseMuons.size() == 2 && vetoElectrons.size() == 1
                                                  && looseElectrons.size() == 1);
     if (!is2Mu && !is3Mu && !is1E2Mu) return;
-    //==== --userflags Skip2Mu: 2Mu 행을 버린다. 3Mu / 1E2Mu 출력은 그대로다.
-    if (Skip2Mu && is2Mu) return;
-    const int channel = is3Mu ? 0 : (is1E2Mu ? 1 : 2);
+    //==== --userflags Skip2Mu: OS 2Mu 행만 버린다. 그 채널이 트리의 99.9% 를
+    //     차지해 hadd 를 8 GB cgroup 한계로 밀어넣던 prompt Z 벌크이고,
+    //     SS 는 그 벌크가 아니라 우리가 원하는 fake 영역이다. 3Mu / 1E2Mu /
+    //     SS 출력은 그대로다.
+    if (Skip2Mu && is2MuOS) return;
+    const int channel = is3Mu ? 0 : (is1E2Mu ? 1 : (is2MuOS ? 2 : 3));
 
     //==== Step 4: trigger (채널마다 다르다)
     //   FR 측정 경로(Mu8/Mu17)는 **아무것도 걸지 않고** 매 row 기록만 한다.
@@ -345,13 +369,15 @@ void closnff::executeEvent() {
             if (fabs(scaled.at(i).Phi() - nonprompt.Phi()) < 1e-6 &&
                 fabs(scaled.at(i).Eta() - nonprompt.Eta()) < 1e-6) nonpromptSlot = (int)i + 1;
     } else if (is2Mu) {
-        //   2Mu: OS + M(mumu) > 12. 1E2Mu 와 같은 모양이고 같은 상수
+        //   2Mu: M(mumu) > 12. 1E2Mu 와 같은 모양이고 같은 상수
         //   (cuts.pair_mass_min = 12) 를 쓴다 — bkg.cc 의 mll > 20 이 아니라
         //   AN 의 12 다. mll>20 / Z veto / MET / jet 은 여전히 offline 이라
         //   bkg.cc 영역을 slice 로 재현할 수 있다.
+        //   전하는 위에서 이미 채널을 갈랐다 (OS -> 2, SS -> 3) 므로 여기서
+        //   다시 자르지 않는다. 아래 블록은 전하와 무관하고 OS 시절과 한 글자도
+        //   달라지지 않는다.
         //   configureChargeOf 는 muons.at(0..2) 를 무조건 참조하고
         //   |q1+q2+q3|==1 을 전제로 순서를 정하므로 여기서 부르면 안 된다.
-        if (!(scaled.at(0).Charge() + scaled.at(1).Charge() == 0)) return;
         pair_emu = scaled.at(0) + scaled.at(1);   // -> pair_mass / pair_pt
         if (!(pair_emu.M() > cuts.pair_mass_min)) return;
         //   m3l 은 세 번째 렙톤이 없어 기본 Particle 그대로 (M() = 0, sentinel 아님).

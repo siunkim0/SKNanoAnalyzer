@@ -27,12 +27,25 @@
 //     q(mu1) + q(mu2) == 0, M(mu mu) > 12 GeV
 //     electron 은 pT > 15 (veto electron 만 pT > 10)
 //
-//   channel = 2 (2Mu, OS dimuon):
+//   channel = 2 (2Mu, OS dimuon)  /  channel = 3 (2Mu, SAME-SIGN):
 //     loose muon 2개 == veto muon 2개, veto electron 0개
 //     **unprescaled single muon** trigger (bkg.cc 와 동일):
 //       2016 IsoMu24 + IsoTkMu24 / 2017 IsoMu27 / 그 외 IsoMu24
 //       leading pT > 26 (2017 은 29), subleading pT > 10
-//     q(mu1) + q(mu2) == 0, M(mu mu) > 12 GeV   <- cone-corrected 로 자른다
+//     M(mu mu) > 12 GeV   <- cone-corrected 로 자른다
+//     전하합 0 이면 channel 2, +-2 이면 channel 3. 두 채널은 그 외 모든
+//     컷과 모든 브랜치가 글자 그대로 같다.
+//
+//     **SS (channel 3) 가 존재하는 이유.** OS dimuon closure 는 구조적으로
+//     불가능하다고 기록돼 있다 (DY_CLOSURE_STATUS.md 2c): sideband 가
+//     99.46% both-prompt — 진짜 Z->mumu 의 **prompt** muon 이 tight
+//     isolation 을 실패한 것 — 이라 matrix method 가 truth 21.5 인 자리에
+//     5,053 개의 fake 를 예측했다. Z->mumu 는 정의상 opposite-sign 이므로
+//     same-sign 은 그 오염을 정확히 제거하고 fake 성분만 남긴다 (prompt
+//     muon 하나 + 전하가 무작위인 fake 하나). muon 의 charge mis-ID 는
+//     ~1e-5 로 무시할 수 있어 electron 과 달리 이 영역을 오염시키지 않는다.
+//     --userflags Skip2Mu 는 **OS 만** 버린다: 트리를 GB 급으로 만들던
+//     prompt Z 벌크가 그쪽이고, SS 는 우리가 원하는 영역이기 때문이다.
 //     Z veto / MET / jet 컷은 **없다** — offline 으로 남긴다. bkg.cc 영역은
 //     mll>20 && |mll-91.2|>15 && ev_njet>=2 && ev_met>40 slice 이고,
 //     DY+b 는 ev_nbjet>=1 이다. pair_mass / pair_pt 는 1E2Mu 와 브랜치 공유.
