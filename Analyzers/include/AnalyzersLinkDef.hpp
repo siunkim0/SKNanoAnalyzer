@@ -31,6 +31,7 @@
 #pragma link C++ class bkg+;
 #pragma link C++ class elecfake+;
 #pragma link C++ class track+;
+#pragma link C++ class muid+;
 #pragma link C++ class chig+;
 #pragma link C++ class Wtag+;
 #pragma link C++ class WtagAK8Pt+;

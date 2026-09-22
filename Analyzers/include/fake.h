@@ -117,6 +117,9 @@ public:
     //         반드시 rawJets / genJets (cleaning 이전) 에서 찾는다
     TString RecoJetFlavor(const Muon &mu) const;
     TString GenJetFlavor(const Muon &mu) const;
+    //   GenJetFlavor 와 같은 dR<0.4 최근접 매칭, source gen jet 의 pT 반환
+    //   (fake_genjetpt_abseta 히스토그램용). 매칭 실패 시 -1
+    float GenJetPt(const Muon &mu) const;
 
     //==== flavor BDT 학습용 flat ntuple (userflag MakeTree)
     //   FlavorTag 문자열 -> 정수 코드 (SetBranch 는 문자열을 지원하지 않는다)

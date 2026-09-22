@@ -1,5 +1,17 @@
 #include "fake.h"
 
+//==== (cutflow) MakeTree 트리 selection 의 단계별 weighted yield.
+//     트리에는 selection 을 통과한 muon 만 남아 앞단계(loose muon 수, electron veto,
+//     trigger)에서 무엇이 얼마나 빠지는지 볼 수 없어서 따로 센다. selection 은 그대로다.
+//     weight = MCweight * GetTriggerLumi("Full") * L1prefire * PU — 단계마다 같은 값을
+//     써야 비율이 의미가 있으므로 경로별 lumi / evtSF 는 섞지 않는다 (closnff.cc 와 동일).
+//     bin: 0 all 1 noise 2 vetomap 3 ==1 loose mu 4 0 loose e 5 Mu8|Mu17 fired
+//          6 pT/ptCorr 문턱 7 away jet pT>30 (= 트리에 쓰인 행)
+//          8 away jet pT>40  9 prompt 제거  10 matched jet flavour b/c/uds/g
+//          (8-10 은 플롯에서 offline 으로 거는 단계 — 트리의 w_mu8/w_mu17 은 경로별
+//           lumi 라 이 weight 와 섞을 수 없어서 여기서 같은 weight 로 센다)
+static float cfW = 1.;
+
 //==== Constructor and Destructor
 fake::fake() : MeasFakeMu8(false), MeasFakeMu17(false), MakeTree(false) {}
 fake::~fake() {}
@@ -45,6 +57,48 @@ void fake::initializeAnalyzer() {
     //==== Run3 에서 우리 FR 이 공식 대비 ptcorr 에 따라 1.30 ~ 0.81 로
     //==== 어긋났던 원인이 정확히 이것이었다.
     if (Run == 3) { cuts.loose_sip3d_max = 8.0; cuts.loose_miniiso_max = 0.4; }
+
+    //==== --userflags MatchWP: Run 2 와 Run 3 의 muon loose WP 을 같게 맞춘다.
+    //==== 두 loose WP 의 **교집합** |SIP3D| < 5 && miniiso < 0.4 로,
+    //==== Run3 는 SIP3D 를 8 -> 5 로, Run2 는 miniiso 를 0.6 -> 0.4 로 조인다.
+    //==== 왜 교집합인가: loose 는 넓힐 수 없다. Run3 ntuple 은 이미
+    //==== miniiso < 0.4 로 쓰였으므로 0.4-0.6 구간은 디스크에 없다.
+    //==== 왜 필요한가: 공식 WP 그대로면 Run3 의 loose 에만 never-tight
+    //==== (SIP3D 5-8) 띠가 들어가고, 그것이 binned map 의 over-prediction 을
+    //==== Run2 +10.7% / Run3 +24.7% 로 갈라놓는다. 맞추면 +14.8% / +15.3%
+    //==== 로 한 밴드가 된다 (neuralff RESULTS.md 4ab, fake/Tools/JETLESS.md).
+    //==== fake.cc 와 closnff.cc 의 이 값은 **반드시 같아야 한다** — 측정과
+    //==== 적용의 WP 가 어긋나면 closure 자체가 무의미하다 (RESULTS 4g).
+    //==== tight 은 건드리지 않는다 (Run 무관, 새 loose 안에 그대로 들어간다).
+    //==== electron loose/veto WP 도 건드리지 않는다: 이 연구는 muon 이고,
+    //==== electron 을 같이 움직이면 event selection 까지 바뀐다.
+    //==== 기본값이 아니다 — flag 를 주지 않으면 공식 WP 그대로다.
+    if (HasFlag("MatchWP")) {
+        cuts.loose_sip3d_max   = 5.0;
+        cuts.loose_miniiso_max = 0.4;
+    }
+
+    //==== --userflags Run2WP: Run 3 의 muon loose WP 을 **Run 2 것 그대로**
+    //==== |SIP3D| < 5 && miniiso < 0.6 으로 맞춘다.
+    //==== MatchWP (두 WP 의 교집합) 와 다르다 — 그 쪽은 Run 2 의 miniiso 까지
+    //==== 0.6 -> 0.4 로 조여서 **어느 run 도 자기 analysis WP 에 있지 않았다**.
+    //==== 여기서는 Run 2 를 전혀 건드리지 않는다 (이미 5 / 0.6 이므로 no-op).
+    //==== 그래서 기준계가 Run 2 의 실제 배포 WP 가 된다: "Run 2 가 쓰는 그
+    //==== loose WP 에서 Run 3 도 같은 closure 를 주는가" 라는 질문이 된다.
+    //==== §4ab 의 항 분해 (SIP3D 8->5 = -9.4 pt, miniiso 0.6->0.4 = +4.1 pt) 로
+    //==== Run 3 flat ~ 1.11 (Run 2 의 1.1074) 을 기대한다.
+    //==== 왜 job 이 필요한가: loose 는 parquet 에서 **좁히는 것만** 가능하다.
+    //==== 여기는 miniiso 를 0.4 -> 0.6 으로 **넓혀야** 하는데 그 띠는 애초에
+    //==== 디스크에 없다. MatchWP 과 달리 offline 으로는 절대 못 한다.
+    //==== Run 무관하게 건다 (Run 2 에서는 no-op) — era 를 잘못 줘도 세 번째
+    //==== WP 이 조용히 생기지 않게 하기 위해서다.
+    //==== fake.cc 와 closnff.cc 의 이 값은 **반드시 같아야 한다** (RESULTS 4g).
+    //==== MatchWP 과 **같이 주면 안 된다** — 뒤의 것이 이긴다.
+    //==== tight / electron WP 은 건드리지 않는다 (MatchWP 과 동일).
+    if (HasFlag("Run2WP")) {
+        cuts.loose_sip3d_max   = 5.0;
+        cuts.loose_miniiso_max = 0.6;
+    }
 
     //==== electron loose WP 도 Run 별로 다르다 (공식
     //==== Electron::Pass_HcToWALooseRun2 SIP3D<8 vs ...Run3 SIP3D<6;
@@ -131,13 +185,21 @@ void fake::executeEvent() {
     Event ev = GetEvent();
     rawJets = GetAllJets();   // flavor 매칭용으로 lepton cleaning 이전 컬렉션을 보관
 
+    cfW = 1.;
+    if (MakeTree && !IsDATA)
+        cfW = MCweight() * ev.GetTriggerLumi("Full") * GetL1PrefireWeight()
+              * myCorr->GetPUWeight(ev.nTrueInt());
+    if (MakeTree) FillHist("CutFlow_1Mu", 0.5, cfW, 11, 0., 11.);
+
     //==== noise (MET) filter 통과 요구
     if (!PassNoiseFilter(rawJets, ev)) return;
+    if (MakeTree) FillHist("CutFlow_1Mu", 1.5, cfW, 11, 0., 11.);
 
     RVec<Muon> rawMuons = GetAllMuons();
 
     //==== jet veto map (공식 측정과 동일하게 event 단위로 적용)
     if (!PassVetoMap(rawJets, rawMuons, "jetvetomap")) return;
+    if (MakeTree) FillHist("CutFlow_1Mu", 2.5, cfW, 11, 0., 11.);
 
     RVec<Electron> rawElectrons = GetAllElectrons();
     sort(rawMuons.begin(), rawMuons.end(), PtComparing);
@@ -325,9 +387,15 @@ void fake::measureFakeRate(const TriggerPath &path, float weight) {
         if (!IsDATA && syst == "Central" && GetLeptonType(mu, gens) <= 0) {
             const TString gf = GenJetFlavor(mu);
             const TString rf = RecoJetFlavor(mu);
+            //==== source gen jet pT (dR<0.4 매칭 실패 시 음수 -> 채우지 않음)
+            const float genJetPt = GenJetPt(mu);
+            const float xvalGenJetPt = min(genJetPt, ptCorrBins.back() - 0.1f);
             for (const auto &tag : tags) {
                 FillHist(base + "/" + tag + "/genflav/" + gf + "/fake_ptcorr_abseta",
                          xval, yval, weight, ptCorrBins, absEtaBins);
+                if (genJetPt >= 0.f)
+                    FillHist(base + "/" + tag + "/genflav/" + gf + "/fake_genjetpt_abseta",
+                             xvalGenJetPt, yval, weight, ptCorrBins, absEtaBins);
                 FillHist(base + "/" + tag + "/recoflav/" + rf + "/fake_ptcorr_abseta",
                          xval, yval, weight, ptCorrBins, absEtaBins);
             }
@@ -469,6 +537,20 @@ TString fake::GenJetFlavor(const Muon &mu) const {
     return matched ? FlavorTag(bestParton, bestHadron, false) : "unmatched";
 }
 
+//==== GenJetFlavor 와 같은 dR<0.4 최근접 매칭, source gen jet 의 pT 반환
+float fake::GenJetPt(const Muon &mu) const {
+    float bestDR = 0.4f;
+    float bestPt = -1.f;
+    for (const auto &gjet : genJets) {
+        const float dr = gjet.DeltaR(mu);
+        if (dr < bestDR) {
+            bestDR = dr;
+            bestPt = gjet.Pt();
+        }
+    }
+    return bestPt;
+}
+
 //==============================================================
 // FlavorTag 문자열 -> 5-class 정수 코드 (SetBranch 는 문자열 branch 를 못 만든다)
 //   0=b 1=c 2=uds(u+d+s) 3=g 4=pileup, -1=unmatched
@@ -512,9 +594,14 @@ void fake::fillTreeRow(Event &ev, float evtSF) {
 
     if (!MakeTree) return;
 
+    //==== (cutflow) loose muon 개수 분포 — Z->mumu 가 "정확히 1개" 에서 얼마나 빠지는지
+    FillHist("CutFlow_nLooseMu", min((int)looseMuons.size(), 5) + 0.5, cfW, 6, 0., 6.);
+
     //==== 측정 영역과 동일: loose muon 1개 + electron 0개
     if (looseMuons.size() != 1) return;
+    FillHist("CutFlow_1Mu", 3.5, cfW, 11, 0., 11.);
     if (looseElectrons.size() != 0) return;
+    FillHist("CutFlow_1Mu", 4.5, cfW, 11, 0., 11.);
 
     const Muon &mu = looseMuons.at(0);
 
@@ -527,7 +614,12 @@ void fake::fillTreeRow(Event &ev, float evtSF) {
                           && mu.Pt() >= 10. && ptCorr >= 10.;
     const bool passMu17 = ev.PassTrigger("HLT_Mu17_TrkIsoVVL")
                           && mu.Pt() >= 20. && ptCorr >= 30.;
+    //==== (cutflow) trigger 가 쏜 것 자체와 pT/ptCorr 문턱을 나눠서 센다 —
+    //     prescale 된 경로가 fake muon 을 못 잡는 것인지 문턱에서 빠지는 것인지 구분.
+    if (ev.PassTrigger("HLT_Mu8_TrkIsoVVL") || ev.PassTrigger("HLT_Mu17_TrkIsoVVL"))
+        FillHist("CutFlow_1Mu", 5.5, cfW, 11, 0., 11.);
     if (!passMu8 && !passMu17) return;
+    FillHist("CutFlow_1Mu", 6.5, cfW, 11, 0., 11.);
 
     //==== away jet: 가장 느슨한 30 GeV 로 열어 두고 40/60 은 플래그로 남긴다
     int nJet25 = 0, nJet30 = 0, nJet40 = 0, nJet60 = 0;
@@ -556,6 +648,7 @@ void fake::fillTreeRow(Event &ev, float evtSF) {
         if (jet.Pt() > 60.) { nJet60++; if (away) hasAway60 = true; }
     }
     if (!hasAway30) return;
+    FillHist("CutFlow_1Mu", 7.5, cfW, 11, 0., 11.);
 
     //==== 측정 영역의 MET / MT 컷 (W/Z prompt 오염 억제) 은 여기서 걸지 않는다.
     //==== ev_met / ev_mt 를 그대로 남겨 offline 에서 자르는 쪽이 넓다:
@@ -692,6 +785,16 @@ void fake::fillTreeRow(Event &ev, float evtSF) {
         leptonType = GetLeptonType(mu, gens);
     }
     const bool isPrompt = (!IsDATA && leptonType > 0);
+
+    //==== (cutflow) 8-10: away jet 40 -> prompt 제거 -> flavour 0..3 (플롯과 같은 순서)
+    if (hasAway40) {
+        FillHist("CutFlow_1Mu", 8.5, cfW, 11, 0., 11.);
+        if (!IsDATA && !isPrompt) {
+            FillHist("CutFlow_1Mu", 9.5, cfW, 11, 0., 11.);
+            if (flavor >= 0 && flavor <= 3)
+                FillHist("CutFlow_1Mu", 10.5, cfW, 11, 0., 11.);
+        }
+    }
 
     //==== weight: 경로마다 trigger lumi 가 달라 하나로 합칠 수 없으므로 따로 남긴다
     float commonW = 1.;

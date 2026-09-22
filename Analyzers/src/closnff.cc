@@ -7,6 +7,14 @@ static const TString TREE = "clos";
 static const float FSENT = -999.;
 static const int   ISENT = -99;
 
+//==== (cutflow) 3Mu 채널의 단계별 weighted yield. tree 에는 selection 을 통과한
+//     이벤트만 남아 앞단계에서 무엇이 빠지는지 볼 수 없어서 따로 센다 — selection 은
+//     그대로다. weight 는 아래 tree weight 와 같은 정의 (MCweight * lumi("Full") *
+//     L1prefire * PU) 를 이벤트 시작에서 한 번 계산해 모든 단계에 쓴다 (fake.cc 와 동일).
+//     bin: 0 all 1 noise 2 vetomap 3 ==3 loose mu 4 0 veto e 5 DoubleMu trigger
+//          6 pT 20/10/10 7 jet 요구(OpenJet 이면 무컷) 8 |sum q|=1 9 OS pair M>12 (= tree 행)
+static float cfW = 1.;
+
 //==== Constructor and Destructor
 closnff::closnff() {}
 closnff::~closnff() {}
@@ -60,6 +68,48 @@ void closnff::initializeAnalyzer() {
     //==== Run3 에서 우리 FR 이 공식 대비 ptcorr 에 따라 1.30 ~ 0.81 로
     //==== 어긋났던 원인이 정확히 이것이었다.
     if (Run == 3) { cuts.loose_sip3d_max = 8.0; cuts.loose_miniiso_max = 0.4; }
+
+    //==== --userflags MatchWP: Run 2 와 Run 3 의 muon loose WP 을 같게 맞춘다.
+    //==== 두 loose WP 의 **교집합** |SIP3D| < 5 && miniiso < 0.4 로,
+    //==== Run3 는 SIP3D 를 8 -> 5 로, Run2 는 miniiso 를 0.6 -> 0.4 로 조인다.
+    //==== 왜 교집합인가: loose 는 넓힐 수 없다. Run3 ntuple 은 이미
+    //==== miniiso < 0.4 로 쓰였으므로 0.4-0.6 구간은 디스크에 없다.
+    //==== 왜 필요한가: 공식 WP 그대로면 Run3 의 loose 에만 never-tight
+    //==== (SIP3D 5-8) 띠가 들어가고, 그것이 binned map 의 over-prediction 을
+    //==== Run2 +10.7% / Run3 +24.7% 로 갈라놓는다. 맞추면 +14.8% / +15.3%
+    //==== 로 한 밴드가 된다 (neuralff RESULTS.md 4ab, fake/Tools/JETLESS.md).
+    //==== fake.cc 와 closnff.cc 의 이 값은 **반드시 같아야 한다** — 측정과
+    //==== 적용의 WP 가 어긋나면 closure 자체가 무의미하다 (RESULTS 4g).
+    //==== tight 은 건드리지 않는다 (Run 무관, 새 loose 안에 그대로 들어간다).
+    //==== electron loose/veto WP 도 건드리지 않는다: 이 연구는 muon 이고,
+    //==== electron 을 같이 움직이면 event selection 까지 바뀐다.
+    //==== 기본값이 아니다 — flag 를 주지 않으면 공식 WP 그대로다.
+    if (HasFlag("MatchWP")) {
+        cuts.loose_sip3d_max   = 5.0;
+        cuts.loose_miniiso_max = 0.4;
+    }
+
+    //==== --userflags Run2WP: Run 3 의 muon loose WP 을 **Run 2 것 그대로**
+    //==== |SIP3D| < 5 && miniiso < 0.6 으로 맞춘다.
+    //==== MatchWP (두 WP 의 교집합) 와 다르다 — 그 쪽은 Run 2 의 miniiso 까지
+    //==== 0.6 -> 0.4 로 조여서 **어느 run 도 자기 analysis WP 에 있지 않았다**.
+    //==== 여기서는 Run 2 를 전혀 건드리지 않는다 (이미 5 / 0.6 이므로 no-op).
+    //==== 그래서 기준계가 Run 2 의 실제 배포 WP 가 된다: "Run 2 가 쓰는 그
+    //==== loose WP 에서 Run 3 도 같은 closure 를 주는가" 라는 질문이 된다.
+    //==== §4ab 의 항 분해 (SIP3D 8->5 = -9.4 pt, miniiso 0.6->0.4 = +4.1 pt) 로
+    //==== Run 3 flat ~ 1.11 (Run 2 의 1.1074) 을 기대한다.
+    //==== 왜 job 이 필요한가: loose 는 parquet 에서 **좁히는 것만** 가능하다.
+    //==== 여기는 miniiso 를 0.4 -> 0.6 으로 **넓혀야** 하는데 그 띠는 애초에
+    //==== 디스크에 없다. MatchWP 과 달리 offline 으로는 절대 못 한다.
+    //==== Run 무관하게 건다 (Run 2 에서는 no-op) — era 를 잘못 줘도 세 번째
+    //==== WP 이 조용히 생기지 않게 하기 위해서다.
+    //==== fake.cc 와 closnff.cc 의 이 값은 **반드시 같아야 한다** (RESULTS 4g).
+    //==== MatchWP 과 **같이 주면 안 된다** — 뒤의 것이 이긴다.
+    //==== tight / electron WP 은 건드리지 않는다 (MatchWP 과 동일).
+    if (HasFlag("Run2WP")) {
+        cuts.loose_sip3d_max   = 5.0;
+        cuts.loose_miniiso_max = 0.6;
+    }
 
     //==== electron loose WP 도 Run 별로 다르다 (공식
     //==== Electron::Pass_HcToWALooseRun2 SIP3D<8 vs ...Run3 SIP3D<6;
@@ -162,11 +212,17 @@ void closnff::executeEvent() {
     Event ev = GetEvent();
     rawJets = GetAllJets();
 
+    cfW = IsDATA ? 1. : MCweight() * ev.GetTriggerLumi("Full") * GetL1PrefireWeight()
+                        * myCorr->GetPUWeight(ev.nTrueInt());
+    FillHist("CutFlow_3Mu", 0.5, cfW, 10, 0., 10.);
+
     if (!PassNoiseFilter(rawJets, ev)) return;
+    FillHist("CutFlow_3Mu", 1.5, cfW, 10, 0., 10.);
 
     RVec<Muon> rawMuons = GetAllMuons();
 
     if (!PassVetoMap(rawJets, rawMuons, "jetvetomap")) return;
+    FillHist("CutFlow_3Mu", 2.5, cfW, 10, 0., 10.);
 
     RVec<Electron> rawElectrons = GetAllElectrons();
     sort(rawMuons.begin(), rawMuons.end(), PtComparing);
@@ -230,6 +286,12 @@ void closnff::executeEvent() {
     const bool is3Mu   = (looseMuons.size() == 3 && vetoElectrons.size() == 0);
     const bool is1E2Mu = (looseMuons.size() == 2 && vetoElectrons.size() == 1
                                                  && looseElectrons.size() == 1);
+    //==== (cutflow) loose muon 개수 분포 + 3Mu 의 두 multiplicity 단계
+    FillHist("CutFlow_nLooseMu", min((int)looseMuons.size(), 5) + 0.5, cfW, 6, 0., 6.);
+    if (looseMuons.size() == 3) {
+        FillHist("CutFlow_3Mu", 3.5, cfW, 10, 0., 10.);
+        if (is3Mu) FillHist("CutFlow_3Mu", 4.5, cfW, 10, 0., 10.);
+    }
     if (!is2Mu && !is3Mu && !is1E2Mu) return;
     //==== --userflags Skip2Mu: OS 2Mu 행만 버린다. 그 채널이 트리의 99.9% 를
     //     차지해 hadd 를 8 GB cgroup 한계로 밀어넣던 prompt Z 벌크이고,
@@ -253,12 +315,14 @@ void closnff::executeEvent() {
                                    : (is1E2Mu ? EMuTriggers : SglMuTriggers)))
         if (ev.PassTrigger(trig)) { passTrig = true; break; }
     if (!passTrig) return;
+    if (is3Mu) FillHist("CutFlow_3Mu", 5.5, cfW, 10, 0., 10.);
 
     //==== Step 5: lepton pT (raw pT 로 자른다 — ClosFakeRate 도 스케일 전에 자른다)
     if (is3Mu) {
         if (!(looseMuons.at(0).Pt() > cuts.lead_mu_pt)) return;
         if (!(looseMuons.at(1).Pt() > cuts.sub_mu_pt))  return;
         if (!(looseMuons.at(2).Pt() > cuts.sub_mu_pt))  return;
+        FillHist("CutFlow_3Mu", 6.5, cfW, 10, 0., 10.);
     } else if (is2Mu) {
         //==== bkg.cc:201 과 같은 trigger-safe 문턱 (IsoMu24 는 26, IsoMu27 은 29).
         //==== 이 분기가 없으면 아래 else 로 떨어져 looseElectrons.at(0) 에서
@@ -299,6 +363,7 @@ void closnff::executeEvent() {
 
     if ((int)jets.size()  < cuts.n_jet_min)  return;
     if ((int)bjets.size() < cuts.n_bjet_min) return;
+    if (is3Mu) FillHist("CutFlow_3Mu", 7.5, cfW, 10, 0., 10.);
 
     //==== Step 7: MET
     METv = ApplyTypeICorrection(ev.GetMETVector(Event::MET_Type::PUPPI),
@@ -340,12 +405,14 @@ void closnff::executeEvent() {
         float qsum = 0.;
         for (const auto &mu : scaled) qsum += mu.Charge();
         if (!(fabs(qsum) == 1.)) return;
+        FillHist("CutFlow_3Mu", 8.5, cfW, 10, 0., 10.);
 
         auto [mu_ss1, mu_ss2, mu_os] = configureChargeOf(scaled);
         Particle pair1 = mu_ss1 + mu_os;
         Particle pair2 = mu_ss2 + mu_os;
         if (!(pair1.M() > cuts.pair_mass_min)) return;
         if (!(pair2.M() > cuts.pair_mass_min)) return;
+        FillHist("CutFlow_3Mu", 9.5, cfW, 10, 0., 10.);
 
         //   ZCand   = 91.2 에 가까운 OS pair, nZCand = 나머지
         //   nonprompt = nZCand 를 이루는 same-sign muon (= fake 후보)
@@ -650,6 +717,26 @@ void closnff::fillMuonSlot(int slot, const Muon *mu) {
     SetBranch(TREE, p + "hasJet",     (bool)(mj != nullptr));
     SetBranch(TREE, p + "flavor",     mu ? FlavorCode(mj) : ISENT);
 
+    //==== fake.cc 의 per-muon 트리(mu_*)에 있는데 여기엔 없던 나머지 14 종.
+    //     trilepton 영역에서도 같은 feature set 을 그리려면 필요하다.
+    //     이름은 fake.cc 쪽에서 "mu_" 접두어만 뗀 것과 정확히 같게 맞춘다.
+    //     selection 은 건드리지 않는다 — 브랜치만 늘어난다.
+    SetBranch(TREE, p + "dxy",         mu ? (float)mu->dXY() : FSENT);
+    SetBranch(TREE, p + "dxyerr",      mu ? (float)mu->dXYerr() : FSENT);
+    SetBranch(TREE, p + "dz",          mu ? (float)mu->dZ() : FSENT);
+    SetBranch(TREE, p + "dzerr",       mu ? (float)mu->dZerr() : FSENT);
+    SetBranch(TREE, p + "ip3d",        mu ? (float)mu->IP3D() : FSENT);
+    SetBranch(TREE, p + "pfiso04",     mu ? (float)mu->PfRelIso04() : FSENT);
+    SetBranch(TREE, p + "tkreliso",    mu ? (float)mu->TkRelIso() : FSENT);
+    //     neutral mini-iso = total - charged (fake.cc / track.cc 와 같은 산술)
+    SetBranch(TREE, p + "miniiso_neu", mu ? (float)(mu->MiniPFRelIso() - mu->MiniPFRelIsoChg()) : FSENT);
+    SetBranch(TREE, p + "highPurity",  mu ? (int)mu->highPurity() : ISENT);
+    SetBranch(TREE, p + "pogTight",    mu ? (int)mu->isPOGTightId() : ISENT);
+    SetBranch(TREE, p + "segmentComp", mu ? (float)mu->SegmentComp() : FSENT);
+    SetBranch(TREE, p + "nStations",   mu ? (int)mu->NStations() : ISENT);
+    SetBranch(TREE, p + "ptErr",       mu ? (float)mu->PtErr() : FSENT);
+    SetBranch(TREE, p + "jetRelIso",   mu ? (float)mu->JetRelIso() : FSENT);
+
     SetBranch(TREE, p + "jet_pt",      jetPt);
     SetBranch(TREE, p + "jet_eta",     jetEta);
     SetBranch(TREE, p + "jet_abseta",  jetAbsEta);
@@ -667,6 +754,13 @@ void closnff::fillMuonSlot(int slot, const Muon *mu) {
     //==== NanoAOD Muon branch 이므로 matched jet 이 없어도 값이 있다 —
     //     jet_ptrel 이 Run3 에서 13% NaN 인 것과 대비된다.
     SetBranch(TREE, p + "jetPtRelv2",      mu ? mu->JetPtRelv2() : FSENT);
+    //==== jetNDauCharged 도 같은 이유로 Muon branch 다. fake.cc:813 이 per-muon
+    //     트리에 같은 이름으로 이미 쓰고 있어서, 트리와 parquet 의 이름이
+    //     어긋나지 않는다. DY 의 selection plane 에서 정보량 41.8% 에 전이
+    //     spread 1.325 로, 정보를 가진 변수 중 DY 로 가장 잘 옮겨가는 축이다
+    //     (jet_nconst 1.457, sv_masssum 1.460, jet_deepjet_cvl 1.689).
+    //     Electron 에는 대응 accessor 가 없어 muon 전용이다 — jetPtRelv2 와 같다.
+    SetBranch(TREE, p + "jetNDauCharged",  mu ? mu->JetNDauCharged() : ISENT);
 
     SetBranch(TREE, p + "sv_n",       svN);
     SetBranch(TREE, p + "sv_mass",    svMass);
