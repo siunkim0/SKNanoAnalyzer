@@ -122,21 +122,16 @@ public:
     //   muon WP 값은 fake.h::AnalysisCuts 와 같은 숫자여야 한다 (위 주석 참고).
     struct AnalysisCuts {
         // muon 공통: POG medium ID + 아래 컷
-        float muon_pt_min    = 10.0;
+        // pT > 20 (10 아니다) — fake.h 와 같은 값, 같은 이유 (jet-less muon 회피).
+        float muon_pt_min    = 20.0;
         float muon_eta_max   =  2.4;
         float muon_dz_max    =  0.1;   // cm
         float muon_tkiso_max =  0.4;   // rel. tracker iso R03 (trigger emulation)
-        // tight WP
-        float tight_sip3d_max   = 3.0;
-        float tight_miniiso_max = 0.1;
-        // loose WP (Run 2)
-        // loose WP: **Run 별로 다르다** (공식 MeasFakeRateV4 는
-        //   Run2 -> Muon::Pass_HcToWALooseRun2 (SIP3D<5, miniiso<0.6)
-        //   Run3 -> Muon::Pass_HcToWALooseRun3 (SIP3D<8, miniiso<0.4)
-        // 를 쓴다). 아래는 Run2 기본값이고 Run3 값은 initializeAnalyzer 에서
-        // 덮어쓴다. tight WP 은 Run 무관하게 같다.
-        float loose_sip3d_max   = 5.0;
-        float loose_miniiso_max = 0.6;
+        // tight / loose WP: PF relative iso (R=0.4) only, no SIP3D/MiniIso,
+        // Run-independent (jet-pT-binned FR study, replaces the old
+        // SIP3D+MiniIso WP everywhere) — fake.h 와 글자 그대로 같은 값.
+        float tight_pfreliso_max = 0.1;
+        float loose_pfreliso_max = 0.4;
         // electron (elecfake.cc::AnalysisCuts 와 같은 숫자)
         float electron_veto_pt_min = 10.0;   // veto / jet cleaning
         float electron_pt_min      = 15.0;   // 측정 대상 (1E2Mu 의 fake 후보)

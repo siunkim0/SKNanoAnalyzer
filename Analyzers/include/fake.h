@@ -49,21 +49,18 @@ public:
     // Analysis cuts (analysis note 의 WP 표 + 측정영역 정의)
     struct AnalysisCuts {
         // muon 공통: POG medium ID + 아래 컷
-        float muon_pt_min    = 10.0;
+        // pT > 20 (10 아니다): jet-less muon 을 피하려고 올렸다 — 낮은 pT muon 은
+        // 소속 PF jet 이 매칭 안 되는 (JetIdx 없음/jetPt<15GeV라 컬렉션에 없음)
+        // 비율이 커서 flavour 기반 FR 연구의 muon 대부분을 못 쓰게 만든다.
+        float muon_pt_min    = 20.0;
         float muon_eta_max   =  2.4;
         float muon_dz_max    =  0.1;   // cm
         float muon_tkiso_max =  0.4;   // rel. tracker iso R03 (trigger emulation)
-        // tight WP
-        float tight_sip3d_max   = 3.0;
-        float tight_miniiso_max = 0.1;
-        // loose WP (Run 2)
-        // loose WP: **Run 별로 다르다** (공식 MeasFakeRateV4 는
-        //   Run2 -> Muon::Pass_HcToWALooseRun2 (SIP3D<5, miniiso<0.6)
-        //   Run3 -> Muon::Pass_HcToWALooseRun3 (SIP3D<8, miniiso<0.4)
-        // 를 쓴다). 아래는 Run2 기본값이고 Run3 값은 initializeAnalyzer 에서
-        // 덮어쓴다. tight WP 은 Run 무관하게 같다.
-        float loose_sip3d_max   = 5.0;
-        float loose_miniiso_max = 0.6;
+        // tight / loose WP: PF relative iso (R=0.4) only, no SIP3D/MiniIso,
+        // Run-independent (jet-pT-binned FR study, replaces the old
+        // SIP3D+MiniIso WP everywhere)
+        float tight_pfreliso_max = 0.1;
+        float loose_pfreliso_max = 0.4;
         // electron veto (공식 측정의 veto electron 과 동일: pT > 10)
         // loose_el_sip3d_max 는 Run 별로 다르다 (Run2 8, Run3 6) — initializeAnalyzer
         float loose_el_sip3d_max   = 8.0;
@@ -120,6 +117,9 @@ public:
     //   GenJetFlavor 와 같은 dR<0.4 최근접 매칭, source gen jet 의 pT 반환
     //   (fake_genjetpt_abseta 히스토그램용). 매칭 실패 시 -1
     float GenJetPt(const Muon &mu) const;
+    //   RecoJetFlavor 와 같은 jetIdx 매칭, source reco jet 의 pT 반환
+    //   (fake_recojetpt_abseta 히스토그램용). 매칭 실패 시 -1
+    float RecoJetPt(const Muon &mu) const;
 
     //==== flavor BDT 학습용 flat ntuple (userflag MakeTree)
     //   FlavorTag 문자열 -> 정수 코드 (SetBranch 는 문자열을 지원하지 않는다)

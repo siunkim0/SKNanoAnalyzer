@@ -62,54 +62,13 @@ void closnff::initializeAnalyzer() {
     if (Run == 2) { looseMvaIB = 0.985; looseMvaOB = 0.96; looseMvaEC = 0.85; }
     else          { looseMvaIB = 0.8;   looseMvaOB = 0.5;  looseMvaEC = -0.8; }
 
-    //==== muon loose WP 은 Run 별로 다르다 (공식 MeasFakeRateV4 의
-    //==== HcToWALooseRun2 / HcToWALooseRun3). tight 은 Run 무관.
-    //==== 이 값이 어긋나면 FR 측정 자체가 공식 map 과 달라진다 —
-    //==== Run3 에서 우리 FR 이 공식 대비 ptcorr 에 따라 1.30 ~ 0.81 로
-    //==== 어긋났던 원인이 정확히 이것이었다.
-    if (Run == 3) { cuts.loose_sip3d_max = 8.0; cuts.loose_miniiso_max = 0.4; }
-
-    //==== --userflags MatchWP: Run 2 와 Run 3 의 muon loose WP 을 같게 맞춘다.
-    //==== 두 loose WP 의 **교집합** |SIP3D| < 5 && miniiso < 0.4 로,
-    //==== Run3 는 SIP3D 를 8 -> 5 로, Run2 는 miniiso 를 0.6 -> 0.4 로 조인다.
-    //==== 왜 교집합인가: loose 는 넓힐 수 없다. Run3 ntuple 은 이미
-    //==== miniiso < 0.4 로 쓰였으므로 0.4-0.6 구간은 디스크에 없다.
-    //==== 왜 필요한가: 공식 WP 그대로면 Run3 의 loose 에만 never-tight
-    //==== (SIP3D 5-8) 띠가 들어가고, 그것이 binned map 의 over-prediction 을
-    //==== Run2 +10.7% / Run3 +24.7% 로 갈라놓는다. 맞추면 +14.8% / +15.3%
-    //==== 로 한 밴드가 된다 (neuralff RESULTS.md 4ab, fake/Tools/JETLESS.md).
+    //==== muon loose/tight WP: PF rel iso (R04) 하나로만 정의한다, Run 무관.
+    //==== SIP3D/MiniIso, 그리고 그것들을 다루던 MatchWP/Run2WP/NoSIP3D
+    //==== userflag 는 전부 없앴다 — fake.cc 가 이 WP 로 옮기며 같은 걸 했다
+    //==== (fake.cc::PassMuonWP 주석 참고). 값은 AnalysisCuts 의 기본값
+    //==== (tight_pfreliso_max=0.1, loose_pfreliso_max=0.4) 그대로 쓴다.
     //==== fake.cc 와 closnff.cc 의 이 값은 **반드시 같아야 한다** — 측정과
     //==== 적용의 WP 가 어긋나면 closure 자체가 무의미하다 (RESULTS 4g).
-    //==== tight 은 건드리지 않는다 (Run 무관, 새 loose 안에 그대로 들어간다).
-    //==== electron loose/veto WP 도 건드리지 않는다: 이 연구는 muon 이고,
-    //==== electron 을 같이 움직이면 event selection 까지 바뀐다.
-    //==== 기본값이 아니다 — flag 를 주지 않으면 공식 WP 그대로다.
-    if (HasFlag("MatchWP")) {
-        cuts.loose_sip3d_max   = 5.0;
-        cuts.loose_miniiso_max = 0.4;
-    }
-
-    //==== --userflags Run2WP: Run 3 의 muon loose WP 을 **Run 2 것 그대로**
-    //==== |SIP3D| < 5 && miniiso < 0.6 으로 맞춘다.
-    //==== MatchWP (두 WP 의 교집합) 와 다르다 — 그 쪽은 Run 2 의 miniiso 까지
-    //==== 0.6 -> 0.4 로 조여서 **어느 run 도 자기 analysis WP 에 있지 않았다**.
-    //==== 여기서는 Run 2 를 전혀 건드리지 않는다 (이미 5 / 0.6 이므로 no-op).
-    //==== 그래서 기준계가 Run 2 의 실제 배포 WP 가 된다: "Run 2 가 쓰는 그
-    //==== loose WP 에서 Run 3 도 같은 closure 를 주는가" 라는 질문이 된다.
-    //==== §4ab 의 항 분해 (SIP3D 8->5 = -9.4 pt, miniiso 0.6->0.4 = +4.1 pt) 로
-    //==== Run 3 flat ~ 1.11 (Run 2 의 1.1074) 을 기대한다.
-    //==== 왜 job 이 필요한가: loose 는 parquet 에서 **좁히는 것만** 가능하다.
-    //==== 여기는 miniiso 를 0.4 -> 0.6 으로 **넓혀야** 하는데 그 띠는 애초에
-    //==== 디스크에 없다. MatchWP 과 달리 offline 으로는 절대 못 한다.
-    //==== Run 무관하게 건다 (Run 2 에서는 no-op) — era 를 잘못 줘도 세 번째
-    //==== WP 이 조용히 생기지 않게 하기 위해서다.
-    //==== fake.cc 와 closnff.cc 의 이 값은 **반드시 같아야 한다** (RESULTS 4g).
-    //==== MatchWP 과 **같이 주면 안 된다** — 뒤의 것이 이긴다.
-    //==== tight / electron WP 은 건드리지 않는다 (MatchWP 과 동일).
-    if (HasFlag("Run2WP")) {
-        cuts.loose_sip3d_max   = 5.0;
-        cuts.loose_miniiso_max = 0.6;
-    }
 
     //==== electron loose WP 도 Run 별로 다르다 (공식
     //==== Electron::Pass_HcToWALooseRun2 SIP3D<8 vs ...Run3 SIP3D<6;
@@ -144,17 +103,20 @@ void closnff::initializeAnalyzer() {
 // (framework 의 HcToWA ID 는 muon TkRelIso 컷이 no-op 이 되는 버그가 있어
 //  fake.cc 가 자체 구현을 쓴다. 같은 이유로 여기서도 자체 구현을 쓴다.)
 //==============================================================
+// Muon WP (jet-pT-binned FR study) — fake.cc::PassMuonWP 와 글자 그대로 같다.
+// 공통 : POG medium ID, |dz| < 0.1 cm, rel. tracker iso (R03) < 0.4
+// tight: rel. PF iso (R04) < 0.1
+// loose: rel. PF iso (R04) < 0.4
+// SIP3D/MiniIso 는 더 이상 쓰지 않는다 (Run 무관, 단일 정의)
 bool closnff::PassMuonWP(const Muon &mu, const TString &wp) const {
     if (!mu.isPOGMediumId()) return false;
     if (!(fabs(mu.dZ()) < cuts.muon_dz_max)) return false;
     if (!(mu.TkRelIso() < cuts.muon_tkiso_max)) return false;
 
     if (wp == "tight") {
-        if (!(fabs(mu.SIP3D()) < cuts.tight_sip3d_max)) return false;
-        if (!(mu.MiniPFRelIso() < cuts.tight_miniiso_max)) return false;
+        if (!(mu.PfRelIso04() < cuts.tight_pfreliso_max)) return false;
     } else {
-        if (!(fabs(mu.SIP3D()) < cuts.loose_sip3d_max)) return false;
-        if (!(mu.MiniPFRelIso() < cuts.loose_miniiso_max)) return false;
+        if (!(mu.PfRelIso04() < cuts.loose_pfreliso_max)) return false;
     }
     return true;
 }
@@ -382,7 +344,7 @@ void closnff::executeEvent() {
     RVec<Muon> scaled;
     for (const auto &mu : looseMuons) {
         Muon s = mu;
-        const float ptCorr = mu.Pt() * (1. + max(0.f, mu.MiniPFRelIso() - cuts.tight_miniiso_max));
+        const float ptCorr = mu.Pt() * (1. + max(0.f, mu.PfRelIso04() - cuts.tight_pfreliso_max));
         s.SetPtEtaPhiM(ptCorr, mu.Eta(), mu.Phi(), mu.M());
         scaled.emplace_back(s);
     }
@@ -608,7 +570,7 @@ void closnff::fillMuonSlot(int slot, const Muon *mu) {
 
     //==== 이 slot 이 안 쓰이는 채널이면 (1E2Mu 의 mu3) 값만 sentinel 로 두고
     //==== 브랜치 목록은 아래에서 똑같이 다 쓴다.
-    const float ptCorr = mu ? mu->Pt() * (1. + max(0.f, mu->MiniPFRelIso() - cuts.tight_miniiso_max)) : FSENT;
+    const float ptCorr = mu ? mu->Pt() * (1. + max(0.f, mu->PfRelIso04() - cuts.tight_pfreliso_max)) : FSENT;
     const float MT = mu ? sqrt(2. * mu->Pt() * METv.Pt() * (1. - cos(mu->DeltaPhi(METv)))) : FSENT;
 
     //==== source jet: lepton cleaning 이전 컬렉션에서 NanoAOD jetIdx 로 찾는다
