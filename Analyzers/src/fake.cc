@@ -6,7 +6,7 @@
 //     weight = MCweight * GetTriggerLumi("Full") * L1prefire * PU — 단계마다 같은 값을
 //     써야 비율이 의미가 있으므로 경로별 lumi / evtSF 는 섞지 않는다 (closnff.cc 와 동일).
 //     bin: 0 all 1 noise 2 vetomap 3 ==1 loose mu 4 0 loose e 5 Mu8|Mu17 fired
-//          6 pT/ptCorr 문턱 7 away jet pT>30 (= 트리에 쓰인 행)
+//          6 Mu17 + pT>=20 + source jet pT>30 7 away jet pT>30 (= 트리에 쓰인 행)
 //          8 away jet pT>40  9 prompt 제거  10 matched jet flavour b/c/uds/g
 //          (8-10 은 플롯에서 offline 으로 거는 단계 — 트리의 w_mu8/w_mu17 은 경로별
 //           lumi 라 이 weight 와 섞을 수 없어서 여기서 같은 weight 로 센다)
@@ -24,16 +24,18 @@ void fake::initializeAnalyzer() {
     MeasFakeMu17 = HasFlag("MeasFakeMu17");  // Mu17 트리거 경로만 측정
     MakeTree     = HasFlag("MakeTree");      // flavor BDT 학습용 flat ntuple
 
-    //==== 플래그가 없으면 두 경로 모두 측정
-    if (!MeasFakeMu8 && !MeasFakeMu17) {
-        MeasFakeMu8 = true;
-        MeasFakeMu17 = true;
-    }
+    //==== jet-pT binning 측정: 트리거는 HLT_Mu17_TrkIsoVVL 하나만 쓴다 (stitch 없음).
+    //==== Mu8 은 --userflags MeasFakeMu8 로 명시할 때만 추가된다.
+    //==== (두 경로를 conePt 30 에서 stitch 하면 jet pT 로 binning 한 FR 에
+    //====  "Mu17 쪽은 conePt >= 30" 이라는 selection bias 가 그대로 들어간다 —
+    //====  tight muon 은 conePt = pT 라서 pT < 30 인 tight 가 전부 빠진다)
+    if (!MeasFakeMu8 && !MeasFakeMu17) MeasFakeMu17 = true;
 
     //==== prescaled single muon trigger 경로 정의 (analysis note Table 38)
     //==== {히스토그램 prefix, HLT 이름, muon pT 컷, cone-corrected pT 컷}
+    //==== Mu17 의 conePt 컷은 없앴다 (0) — 대신 source jet pT > cuts.srcjet_pt_min
     if (MeasFakeMu8)  paths.push_back({"Mu8",  "HLT_Mu8_TrkIsoVVL",  10., 10.});
-    if (MeasFakeMu17) paths.push_back({"Mu17", "HLT_Mu17_TrkIsoVVL", 20., 30.});
+    if (MeasFakeMu17) paths.push_back({"Mu17", "HLT_Mu17_TrkIsoVVL", 20., 0.});
 
     //==== systematic 목록: Central = away jet pT > 40 GeV
     //==== away jet pT variation 은 2D 히스토그램 몇 개만 더 채우는 것이라
@@ -265,7 +267,11 @@ void fake::measureFakeRate(const TriggerPath &path, float weight) {
     //==== Step 3: cone-corrected pT = pT * (1 + max(0, miniIso - 0.1))
     //====         tight iso 기준(0.1)을 넘는 만큼 pT 를 보정해 준다
     const float ptCorr = mu.Pt() * (1. + max(0.f, mu.PfRelIso04() - cuts.tight_pfreliso_max));
-    if (ptCorr < path.ptCorrCut) return;   // Mu8: 10, Mu17: 30
+    if (ptCorr < path.ptCorrCut) return;   // Mu8: 10, Mu17: 0 (conePt 컷 없음)
+
+    //==== Step 3b: muon 의 source jet pT > 30 GeV (conePt 컷 대신).
+    //====          jet 이 없는 muon (jetIdx < 0) 은 RecoJetPt = -1 이라 여기서 빠진다
+    if (!(RecoJetPt(mu) > cuts.srcjet_pt_min)) return;
 
     //==== tight WP 통과 여부, prompt/fake 구분 (MC only)
     const bool isTight = PassMuonWP(mu, "tight");
@@ -581,13 +587,17 @@ void fake::fillTreeRow(Event &ev, float evtSF) {
     //==== 트리거 경로별 통과 여부 (paths 는 userflag 로 잘릴 수 있어 직접 정의)
     const bool passMu8  = ev.PassTrigger("HLT_Mu8_TrkIsoVVL")
                           && mu.Pt() >= 10. && ptCorr >= 10.;
+    //==== Mu17: conePt 컷 없음 (measureFakeRate 의 Mu17 경로와 같은 정의)
     const bool passMu17 = ev.PassTrigger("HLT_Mu17_TrkIsoVVL")
-                          && mu.Pt() >= 20. && ptCorr >= 30.;
+                          && mu.Pt() >= 20.;
     //==== (cutflow) trigger 가 쏜 것 자체와 pT/ptCorr 문턱을 나눠서 센다 —
     //     prescale 된 경로가 fake muon 을 못 잡는 것인지 문턱에서 빠지는 것인지 구분.
     if (ev.PassTrigger("HLT_Mu8_TrkIsoVVL") || ev.PassTrigger("HLT_Mu17_TrkIsoVVL"))
         FillHist("CutFlow_1Mu", 5.5, cfW, 11, 0., 11.);
-    if (!passMu8 && !passMu17) return;
+    //==== 트리도 측정과 같게: Mu17 하나만 + source jet pT > srcjet_pt_min.
+    //==== pass_mu8 / w_mu8 컬럼은 호환을 위해 그대로 남긴다 (행 선택에는 안 쓴다)
+    if (!passMu17) return;
+    if (!(RecoJetPt(mu) > cuts.srcjet_pt_min)) return;
     FillHist("CutFlow_1Mu", 6.5, cfW, 11, 0., 11.);
 
     //==== away jet: 가장 느슨한 30 GeV 로 열어 두고 40/60 은 플래그로 남긴다

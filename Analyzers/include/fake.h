@@ -72,6 +72,7 @@ public:
         float jet_eta_max  =  2.4;   // 2016: 2.4, 그 외: 2.5 (initializeAnalyzer 에서 설정)
         float jet_lep_dr   =  0.4;   // lepton 과 겹치는 jet 제거
         float awayjet_pt   = 40.0;   // Central away jet pT 컷
+        float srcjet_pt_min = 30.0;  // muon 의 source jet (jetIdx, cleaning 이전) pT 컷 — conePt 컷 대신
         float awayjet_dr   =  0.7;   // dR(mu, away jet)
         // 측정 영역 (W/Z prompt 오염 억제)
         float met_max = 25.0;
