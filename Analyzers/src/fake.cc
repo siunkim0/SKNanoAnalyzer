@@ -6,14 +6,15 @@
 //     weight = MCweight * GetTriggerLumi("Full") * L1prefire * PU — 단계마다 같은 값을
 //     써야 비율이 의미가 있으므로 경로별 lumi / evtSF 는 섞지 않는다 (closnff.cc 와 동일).
 //     bin: 0 all 1 noise 2 vetomap 3 ==1 loose mu 4 0 loose e 5 Mu8|Mu17 fired
-//          6 Mu17 + pT>=20 + source jet pT>30 7 away jet pT>30 (= 트리에 쓰인 행)
+//          6 pT/ptCorr 문턱 (JetBinWP: Mu17 + pT>=20 + source jet pT>30)
+//          7 away jet pT>30 (= 트리에 쓰인 행)
 //          8 away jet pT>40  9 prompt 제거  10 matched jet flavour b/c/uds/g
 //          (8-10 은 플롯에서 offline 으로 거는 단계 — 트리의 w_mu8/w_mu17 은 경로별
 //           lumi 라 이 weight 와 섞을 수 없어서 여기서 같은 weight 로 센다)
 static float cfW = 1.;
 
 //==== Constructor and Destructor
-fake::fake() : MeasFakeMu8(false), MeasFakeMu17(false), MakeTree(false) {}
+fake::fake() : MeasFakeMu8(false), MeasFakeMu17(false), MakeTree(false), JetBinWP(false) {}
 fake::~fake() {}
 
 //==== Initialize variables
@@ -23,19 +24,31 @@ void fake::initializeAnalyzer() {
     MeasFakeMu8  = HasFlag("MeasFakeMu8");   // Mu8 트리거 경로만 측정
     MeasFakeMu17 = HasFlag("MeasFakeMu17");  // Mu17 트리거 경로만 측정
     MakeTree     = HasFlag("MakeTree");      // flavor BDT 학습용 flat ntuple
+    JetBinWP     = HasFlag("JetBinWP");      // jet-pT-binned FR study (nffj / nffj2)
 
-    //==== jet-pT binning 측정: 트리거는 HLT_Mu17_TrkIsoVVL 하나만 쓴다 (stitch 없음).
-    //==== Mu8 은 --userflags MeasFakeMu8 로 명시할 때만 추가된다.
-    //==== (두 경로를 conePt 30 에서 stitch 하면 jet pT 로 binning 한 FR 에
-    //====  "Mu17 쪽은 conePt >= 30" 이라는 selection bias 가 그대로 들어간다 —
-    //====  tight muon 은 conePt = pT 라서 pT < 30 인 tight 가 전부 빠진다)
-    if (!MeasFakeMu8 && !MeasFakeMu17) MeasFakeMu17 = true;
+    if (JetBinWP) {
+        //==== jet-pT binning 측정: 트리거는 HLT_Mu17_TrkIsoVVL 하나만 쓴다 (stitch 없음).
+        //==== Mu8 은 --userflags MeasFakeMu8 로 명시할 때만 추가된다.
+        //==== (두 경로를 conePt 30 에서 stitch 하면 jet pT 로 binning 한 FR 에
+        //====  "Mu17 쪽은 conePt >= 30" 이라는 selection bias 가 그대로 들어간다 —
+        //====  tight muon 은 conePt = pT 라서 pT < 30 인 tight 가 전부 빠진다)
+        if (!MeasFakeMu8 && !MeasFakeMu17) MeasFakeMu17 = true;
+        //==== muon pT > 20: jet-less muon 을 피하려고 (fake.h 의 muon_pt_min 설명)
+        cuts.muon_pt_min = 20.0;
+    } else {
+        //==== 플래그가 없으면 두 경로 모두 측정
+        if (!MeasFakeMu8 && !MeasFakeMu17) {
+            MeasFakeMu8 = true;
+            MeasFakeMu17 = true;
+        }
+    }
 
     //==== prescaled single muon trigger 경로 정의 (analysis note Table 38)
     //==== {히스토그램 prefix, HLT 이름, muon pT 컷, cone-corrected pT 컷}
-    //==== Mu17 의 conePt 컷은 없앴다 (0) — 대신 source jet pT > cuts.srcjet_pt_min
+    //==== JetBinWP 에서는 Mu17 의 conePt 컷을 없앤다 (0) — 대신 source jet pT >
+    //==== cuts.srcjet_pt_min
     if (MeasFakeMu8)  paths.push_back({"Mu8",  "HLT_Mu8_TrkIsoVVL",  10., 10.});
-    if (MeasFakeMu17) paths.push_back({"Mu17", "HLT_Mu17_TrkIsoVVL", 20., 0.});
+    if (MeasFakeMu17) paths.push_back({"Mu17", "HLT_Mu17_TrkIsoVVL", 20., JetBinWP ? 0.f : 30.f});
 
     //==== systematic 목록: Central = away jet pT > 40 GeV
     //==== away jet pT variation 은 2D 히스토그램 몇 개만 더 채우는 것이라
@@ -52,6 +65,56 @@ void fake::initializeAnalyzer() {
     //==== electron veto 가 달라진다
     if (Run == 2) { looseMvaIB = 0.985; looseMvaOB = 0.96; looseMvaEC = 0.85; }
     else          { looseMvaIB = 0.8;   looseMvaOB = 0.5;  looseMvaEC = -0.8; }
+
+    //==== muon loose WP 은 Run 별로 다르다 (공식 MeasFakeRateV4 의
+    //==== HcToWALooseRun2 / HcToWALooseRun3). tight 은 Run 무관.
+    //==== 이 값이 어긋나면 FR 측정 자체가 공식 map 과 달라진다 —
+    //==== Run3 에서 우리 FR 이 공식 대비 ptcorr 에 따라 1.30 ~ 0.81 로
+    //==== 어긋났던 원인이 정확히 이것이었다.
+    //==== (JetBinWP 은 PF-iso WP 만 쓰므로 아래 세 블록과 무관하다)
+    if (Run == 3) { cuts.loose_sip3d_max = 8.0; cuts.loose_miniiso_max = 0.4; }
+
+    //==== --userflags MatchWP: Run 2 와 Run 3 의 muon loose WP 을 같게 맞춘다.
+    //==== 두 loose WP 의 **교집합** |SIP3D| < 5 && miniiso < 0.4 로,
+    //==== Run3 는 SIP3D 를 8 -> 5 로, Run2 는 miniiso 를 0.6 -> 0.4 로 조인다.
+    //==== 왜 교집합인가: loose 는 넓힐 수 없다. Run3 ntuple 은 이미
+    //==== miniiso < 0.4 로 쓰였으므로 0.4-0.6 구간은 디스크에 없다.
+    //==== 왜 필요한가: 공식 WP 그대로면 Run3 의 loose 에만 never-tight
+    //==== (SIP3D 5-8) 띠가 들어가고, 그것이 binned map 의 over-prediction 을
+    //==== Run2 +10.7% / Run3 +24.7% 로 갈라놓는다. 맞추면 +14.8% / +15.3%
+    //==== 로 한 밴드가 된다 (neuralff RESULTS.md 4ab, fake/Tools/JETLESS.md).
+    //==== fake.cc 와 closnff.cc 의 이 값은 **반드시 같아야 한다** — 측정과
+    //==== 적용의 WP 가 어긋나면 closure 자체가 무의미하다 (RESULTS 4g).
+    //==== tight 은 건드리지 않는다 (Run 무관, 새 loose 안에 그대로 들어간다).
+    //==== electron loose/veto WP 도 건드리지 않는다: 이 연구는 muon 이고,
+    //==== electron 을 같이 움직이면 event selection 까지 바뀐다.
+    //==== 기본값이 아니다 — flag 를 주지 않으면 공식 WP 그대로다.
+    if (HasFlag("MatchWP")) {
+        cuts.loose_sip3d_max   = 5.0;
+        cuts.loose_miniiso_max = 0.4;
+    }
+
+    //==== --userflags Run2WP: Run 3 의 muon loose WP 을 **Run 2 것 그대로**
+    //==== |SIP3D| < 5 && miniiso < 0.6 으로 맞춘다.
+    //==== MatchWP (두 WP 의 교집합) 와 다르다 — 그 쪽은 Run 2 의 miniiso 까지
+    //==== 0.6 -> 0.4 로 조여서 **어느 run 도 자기 analysis WP 에 있지 않았다**.
+    //==== 여기서는 Run 2 를 전혀 건드리지 않는다 (이미 5 / 0.6 이므로 no-op).
+    //==== 그래서 기준계가 Run 2 의 실제 배포 WP 가 된다: "Run 2 가 쓰는 그
+    //==== loose WP 에서 Run 3 도 같은 closure 를 주는가" 라는 질문이 된다.
+    //==== §4ab 의 항 분해 (SIP3D 8->5 = -9.4 pt, miniiso 0.6->0.4 = +4.1 pt) 로
+    //==== Run 3 flat ~ 1.11 (Run 2 의 1.1074) 을 기대한다.
+    //==== 왜 job 이 필요한가: loose 는 parquet 에서 **좁히는 것만** 가능하다.
+    //==== 여기는 miniiso 를 0.4 -> 0.6 으로 **넓혀야** 하는데 그 띠는 애초에
+    //==== 디스크에 없다. MatchWP 과 달리 offline 으로는 절대 못 한다.
+    //==== Run 무관하게 건다 (Run 2 에서는 no-op) — era 를 잘못 줘도 세 번째
+    //==== WP 이 조용히 생기지 않게 하기 위해서다.
+    //==== fake.cc 와 closnff.cc 의 이 값은 **반드시 같아야 한다** (RESULTS 4g).
+    //==== MatchWP 과 **같이 주면 안 된다** — 뒤의 것이 이긴다.
+    //==== tight / electron WP 은 건드리지 않는다 (MatchWP 과 동일).
+    if (HasFlag("Run2WP")) {
+        cuts.loose_sip3d_max   = 5.0;
+        cuts.loose_miniiso_max = 0.6;
+    }
 
     //==== electron loose WP 도 Run 별로 다르다 (공식
     //==== Electron::Pass_HcToWALooseRun2 SIP3D<8 vs ...Run3 SIP3D<6;
@@ -79,11 +142,11 @@ void fake::initializeAnalyzer() {
 }
 
 //==============================================================
-// Muon WP (jet-pT-binned FR study)
-// 공통 : POG medium ID, |dz| < 0.1 cm, rel. tracker iso (R03) < 0.4
-// tight: rel. PF iso (R04) < 0.1
-// loose: rel. PF iso (R04) < 0.4
-// SIP3D/MiniIso 는 더 이상 쓰지 않는다 (Run 무관, 단일 정의)
+// Muon WP (analysis note 의 WP 표)
+// 공통       : POG medium ID, |dz| < 0.1 cm, rel. tracker iso (R03) < 0.4
+// tight      : |SIP3D| < 3, rel. mini-iso < 0.1
+// loose(Run2): |SIP3D| < 5, rel. mini-iso < 0.6
+// JetBinWP   : tight rel. PF iso (R04) < 0.1, loose < 0.4, SIP3D/MiniIso 없음
 //==============================================================
 bool fake::PassMuonWP(const Muon &mu, const TString &wp) const {
     //==== 공통 컷
@@ -92,12 +155,31 @@ bool fake::PassMuonWP(const Muon &mu, const TString &wp) const {
     if (!(mu.TkRelIso() < cuts.muon_tkiso_max)) return false;   // trigger emulation
 
     //==== tight / loose 별 컷
+    if (JetBinWP) {
+        if (wp == "tight") {
+            if (!(mu.PfRelIso04() < cuts.tight_pfreliso_max)) return false;
+        } else {
+            if (!(mu.PfRelIso04() < cuts.loose_pfreliso_max)) return false;
+        }
+        return true;
+    }
     if (wp == "tight") {
-        if (!(mu.PfRelIso04() < cuts.tight_pfreliso_max)) return false;
+        if (!(fabs(mu.SIP3D()) < cuts.tight_sip3d_max)) return false;
+        if (!(mu.MiniPFRelIso() < cuts.tight_miniiso_max)) return false;
     } else {
-        if (!(mu.PfRelIso04() < cuts.loose_pfreliso_max)) return false;
+        if (!(fabs(mu.SIP3D()) < cuts.loose_sip3d_max)) return false;
+        if (!(mu.MiniPFRelIso() < cuts.loose_miniiso_max)) return false;
     }
     return true;
+}
+
+//==== cone-corrected pT = pT * (1 + max(0, iso - tight iso 기준)).
+//==== tight iso 기준을 넘는 만큼 pT 를 보정해 준다. iso 는 WP 의 isolation —
+//==== 기본 miniiso (기준 0.1), JetBinWP 에서 PfRelIso04 (기준 0.1).
+float fake::PtCorr(const Muon &mu) const {
+    if (JetBinWP)
+        return mu.Pt() * (1. + max(0.f, mu.PfRelIso04() - cuts.tight_pfreliso_max));
+    return mu.Pt() * (1. + max(0.f, mu.MiniPFRelIso() - cuts.tight_miniiso_max));
 }
 
 //==============================================================
@@ -265,13 +347,13 @@ void fake::measureFakeRate(const TriggerPath &path, float weight) {
     if (mu.Pt() < path.ptCut) return;
 
     //==== Step 3: cone-corrected pT = pT * (1 + max(0, miniIso - 0.1))
-    //====         tight iso 기준(0.1)을 넘는 만큼 pT 를 보정해 준다
-    const float ptCorr = mu.Pt() * (1. + max(0.f, mu.PfRelIso04() - cuts.tight_pfreliso_max));
-    if (ptCorr < path.ptCorrCut) return;   // Mu8: 10, Mu17: 0 (conePt 컷 없음)
+    //====         tight iso 기준(0.1)을 넘는 만큼 pT 를 보정해 준다 (PtCorr)
+    const float ptCorr = PtCorr(mu);
+    if (ptCorr < path.ptCorrCut) return;   // Mu8: 10, Mu17: 30 (JetBinWP: 0)
 
-    //==== Step 3b: muon 의 source jet pT > 30 GeV (conePt 컷 대신).
+    //==== Step 3b (JetBinWP 만): muon 의 source jet pT > 30 GeV (conePt 컷 대신).
     //====          jet 이 없는 muon (jetIdx < 0) 은 RecoJetPt = -1 이라 여기서 빠진다
-    if (!(RecoJetPt(mu) > cuts.srcjet_pt_min)) return;
+    if (JetBinWP && !(RecoJetPt(mu) > cuts.srcjet_pt_min)) return;
 
     //==== tight WP 통과 여부, prompt/fake 구분 (MC only)
     const bool isTight = PassMuonWP(mu, "tight");
@@ -581,23 +663,28 @@ void fake::fillTreeRow(Event &ev, float evtSF) {
     const Muon &mu = looseMuons.at(0);
 
     //==== cone-corrected pT / MT (measureFakeRate 와 같은 정의)
-    const float ptCorr = mu.Pt() * (1. + max(0.f, mu.PfRelIso04() - cuts.tight_pfreliso_max));
+    const float ptCorr = PtCorr(mu);
     const float MT = sqrt(2. * mu.Pt() * METv.Pt() * (1. - cos(mu.DeltaPhi(METv))));
 
     //==== 트리거 경로별 통과 여부 (paths 는 userflag 로 잘릴 수 있어 직접 정의)
     const bool passMu8  = ev.PassTrigger("HLT_Mu8_TrkIsoVVL")
                           && mu.Pt() >= 10. && ptCorr >= 10.;
-    //==== Mu17: conePt 컷 없음 (measureFakeRate 의 Mu17 경로와 같은 정의)
+    //==== Mu17: conePt >= 30 (JetBinWP: conePt 컷 없음 — measureFakeRate 의 Mu17
+    //==== 경로와 같은 정의)
     const bool passMu17 = ev.PassTrigger("HLT_Mu17_TrkIsoVVL")
-                          && mu.Pt() >= 20.;
+                          && mu.Pt() >= 20. && (JetBinWP || ptCorr >= 30.);
     //==== (cutflow) trigger 가 쏜 것 자체와 pT/ptCorr 문턱을 나눠서 센다 —
     //     prescale 된 경로가 fake muon 을 못 잡는 것인지 문턱에서 빠지는 것인지 구분.
     if (ev.PassTrigger("HLT_Mu8_TrkIsoVVL") || ev.PassTrigger("HLT_Mu17_TrkIsoVVL"))
         FillHist("CutFlow_1Mu", 5.5, cfW, 11, 0., 11.);
-    //==== 트리도 측정과 같게: Mu17 하나만 + source jet pT > srcjet_pt_min.
-    //==== pass_mu8 / w_mu8 컬럼은 호환을 위해 그대로 남긴다 (행 선택에는 안 쓴다)
-    if (!passMu17) return;
-    if (!(RecoJetPt(mu) > cuts.srcjet_pt_min)) return;
+    if (JetBinWP) {
+        //==== 트리도 측정과 같게: Mu17 하나만 + source jet pT > srcjet_pt_min.
+        //==== pass_mu8 / w_mu8 컬럼은 호환을 위해 그대로 남긴다 (행 선택에는 안 쓴다)
+        if (!passMu17) return;
+        if (!(RecoJetPt(mu) > cuts.srcjet_pt_min)) return;
+    } else {
+        if (!passMu8 && !passMu17) return;
+    }
     FillHist("CutFlow_1Mu", 6.5, cfW, 11, 0., 11.);
 
     //==== away jet: 가장 느슨한 30 GeV 로 열어 두고 40/60 은 플래그로 남긴다
@@ -711,6 +798,9 @@ void fake::fillTreeRow(Event &ev, float evtSF) {
     float svMass = FSENT, svPt = FSENT, svPtRatio = FSENT, svDlenSig = FSENT;
     float svDxySig = FSENT, svPAngle = FSENT, svChi2 = FSENT;
     float svDRJet = FSENT, svDRMu = FSENT, svMassSum = FSENT;
+    int   svCharge = ISENT;
+    float svNdof = FSENT, svDlen = FSENT, svDxy = FSENT, svEta = FSENT, svPhi = FSENT;
+    float svX = FSENT, svY = FSENT, svZ = FSENT;
     if (mj) {
         const float jetPhi = mj->Phi();
         float bestDlenSig = -1.;
@@ -736,6 +826,15 @@ void fake::fillTreeRow(Event &ev, float evtSF) {
             svPAngle   = SV_pAngle[bestIdx];
             svChi2     = SV_chi2[bestIdx];
             svNTracks  = (int)SV_ntracks[bestIdx];
+            svCharge   = (int)SV_charge[bestIdx];
+            svNdof     = SV_ndof[bestIdx];
+            svDlen     = SV_dlen[bestIdx];
+            svDxy      = SV_dxy[bestIdx];
+            svEta      = SV_eta[bestIdx];
+            svPhi      = SV_phi[bestIdx];
+            svX        = SV_x[bestIdx];
+            svY        = SV_y[bestIdx];
+            svZ        = SV_z[bestIdx];
             float dphiJ = SV_phi[bestIdx] - jetPhi;
             while (dphiJ >  M_PI) dphiJ -= 2. * M_PI;
             while (dphiJ < -M_PI) dphiJ += 2. * M_PI;
@@ -937,6 +1036,15 @@ void fake::fillTreeRow(Event &ev, float evtSF) {
     SetBranch(t, "sv_ntracks",   svNTracks);
     SetBranch(t, "sv_dr_jet",    svDRJet);
     SetBranch(t, "sv_dr_mu",     svDRMu);
+    SetBranch(t, "sv_charge",    svCharge);
+    SetBranch(t, "sv_ndof",      svNdof);
+    SetBranch(t, "sv_dlen",      svDlen);
+    SetBranch(t, "sv_dxy",       svDxy);
+    SetBranch(t, "sv_eta",       svEta);
+    SetBranch(t, "sv_phi",       svPhi);
+    SetBranch(t, "sv_x",         svX);
+    SetBranch(t, "sv_y",         svY);
+    SetBranch(t, "sv_z",         svZ);
 
     //---- event / away jet context
     SetBranch(t, "ev_met",          (float)METv.Pt());
@@ -955,10 +1063,32 @@ void fake::fillTreeRow(Event &ev, float evtSF) {
     SetBranch(t, "ev_awayjet_dphi", awayJetDPhi);
     SetBranch(t, "ev_nawayjet40",   nAway40);
     SetBranch(t, "ev_nawayjetb40",  nAwayB40);
+    //==== 주의: ev_nPV 는 실제로는 Pileup_nPU 다 (MC). Event::SetnPV 를 부르는 곳이
+    //==== 없고 GetEvent 의 SetnPileUp(Pileup_nPU) 가 같은 j_nPV 를 채운다. DATA 에서는
+    //==== 초기화되지 않은 값. 이름은 호환을 위해 그대로 두고, 진짜 vertex 수는
+    //==== 아래 ev_pvNpvs / ev_pvNpvsGood 를 쓴다.
     SetBranch(t, "ev_nPV",          ev.nPV());
     SetBranch(t, "ev_nPVsGood",     ev.nPVsGood());
     SetBranch(t, "ev_rho",          fixedGridRhoFastjetAll);
     SetBranch(t, "ev_nTrueInt",     IsDATA ? -1.f : ev.nTrueInt());
+
+    //---- primary vertex (NanoAOD PV_*). muon 의 SIP3D 오차에는 PV 오차가 들어가고
+    //     PV 정밀도는 PV 에 묶인 track 의 sum pt^2 (PV_score) 에 따라 달라진다 —
+    //     같은 conePt 에서 QCD 와 ttbar 의 SIP3D 가 다른 이유 중 하나.
+    //     Run 2 의 PV_npvs / PV_npvsGood 는 Int_t (_RunII), Run 3 은 UChar_t.
+    SetBranch(t, "ev_pvScore",      (float)PV_score);
+    SetBranch(t, "ev_pvNdof",       (float)PV_ndof);
+    SetBranch(t, "ev_pvChi2",       (float)PV_chi2);
+    SetBranch(t, "ev_pvX",          (float)PV_x);
+    SetBranch(t, "ev_pvY",          (float)PV_y);
+    SetBranch(t, "ev_pvZ",          (float)PV_z);
+    SetBranch(t, "ev_pvNpvs",       Run == 2 ? (int)PV_npvs_RunII     : (int)PV_npvs);
+    SetBranch(t, "ev_pvNpvsGood",   Run == 2 ? (int)PV_npvsGood_RunII : (int)PV_npvsGood);
+    //---- gen vertex (MC only; DATA -999). **진단 전용** — gen truth 이므로
+    //     네트워크 입력으로 쓰면 안 된다 (PV - gen vertex = PV 해상도/끌림 측정용)
+    SetBranch(t, "ev_genVtxX",      IsDATA ? -999.f : (float)GenVtx_x);
+    SetBranch(t, "ev_genVtxY",      IsDATA ? -999.f : (float)GenVtx_y);
+    SetBranch(t, "ev_genVtxZ",      IsDATA ? -999.f : (float)GenVtx_z);
 
     FillTrees(t);
 }

@@ -518,3 +518,97 @@
 #       2. tree 에 WP 이 실제로 들어갔는지: max mu_sip3d < 5.0, max mu_miniiso
 #          < 0.6, 그리고 miniiso 0.4-0.6 띠에 row 가 **있어야** 한다.
 #          (flag 없이 만든 tree 는 1,2 의 상한은 통과하고 이것만 실패한다.)
+
+# ---------------------------------------------------------------------------
+# (2026-10-05 주의) 아래 NoSIP3D 블록의 userflag NoSIP3D 는 지금 커밋된 어느
+# fake.cc 에도 없다 (git log -S 로 확인). HasFlag 는 모르는 flag 를 조용히
+# 무시하므로, 지금 이 줄을 그대로 다시 내면 NoSIP3D 가 아니라 기본 WP (analysis
+# WP) 로 돌아간다. 다시 낼 일이 있으면 flag 부터 fake.cc 에 넣을 것.
+#
+# (2026-09-22) NoSIP3D — muon WP 에서 SIP3D 컷을 loose / tight 양쪽 다 제거.
+#
+#     loose = POG Medium + |dZ|<0.1 + TkRelIso<0.4 + miniiso<0.6
+#     tight = 거기에 miniiso<0.1        <- tight 이 isolation 하나로만 정의된다
+#
+#     왜: impact parameter 는 저 pT 에서 b/c 를 가르는 고전적 변수인데
+#     (p_T^rel ~ p_mu sin(theta) 라 각이 열려 있어도 p_mu 와 함께 죽는다),
+#     neuralff 의 Rule 1 (RESULTS.md 4i) 이 IP 계열 전체 — mu_ip3d (|sip3d| 와
+#     corr 0.620), |mu_dxy| (0.540), hypot(dxysig,dzsig) (0.946) — 를 금지해야
+#     했던 유일한 이유가 SIP3D 가 tight 을 **정의**하기 때문이다. WP 에서 빼면
+#     그 이유가 사라진다. 목표 arm: conept, |eta|, sv_masssum, jet_nconst,
+#     mu_jetPtRelv2, mu_dxy  (neuralff/config/nff_nosip.yaml 의 sv3pd).
+#
+#     왜 job 이 필요한가 (Run2WP 와 같은 이유): loose 가 **넓어진다**.
+#     |SIP3D| > 5 인 muon 은 기존 tree 에 아예 없고 parquet 은 조이는 것만
+#     된다. tight 쪽만 빼는 것은 offline 으로 되고 (nff_nosip.yaml 의 label:
+#     블록), 그 파일럿에서 dxy 는 저 pT 정보가 1.3% 뿐이었다 — loose 의
+#     |SIP3D|<5 가 변위 꼬리를 이미 잘라냈기 때문이다. 그것을 여는 것이
+#     이 제출의 전부다.
+#
+#     Run 2 4 era 만. 12 submission.
+#     출력: /gv0/.../fake/MakeTree_NoSIP3D/{era}_nffns/   <- 한 단계 깊다
+#     (userflag 가 SKNano.py:426 에서 디렉토리 level 을 만든다.)
+#     QCD 는 map 과 model 의 소스, TTLJ / DYJets 는 closure 의 target 이다.
+#     NoSIP3D 를 MatchWP / Run2WP 와 **같이 주지 말 것** (뒤의 것이 이긴다).
+#for ERA in 2016preVFP 2016postVFP 2017 2018; do
+#SKNano.py -a fake -i 'QCD_Pt-*MuEnriched*' -e $ERA -n 40 --userflags MakeTree,NoSIP3D --tag nffns
+#SKNano.py -a fake -i TTLJ_powheg           -e $ERA -n 40 --userflags MakeTree,NoSIP3D --tag nffns
+#SKNano.py -a fake -i DYJets                -e $ERA -n 40 --userflags MakeTree,NoSIP3D --tag nffns
+#SKNano.py -a fake -i DYJets10to50          -e $ERA -n 40 --userflags MakeTree,NoSIP3D --tag nffns
+#done
+#
+#     rebuild 필요: NoSIP3D 가 libAnalyzers.so 에 들어가야 한다 (Analyzers/ 만
+#     바뀌었으므로 ./scripts/rebuild.sh).
+#     디스크: loose 가 넓어지므로 기존 nff (Run 2) 보다 크다.
+#
+#     제출 후 gate (가장 강한 것부터):
+#       1. tree 에 WP 이 실제로 들어갔는가 — max mu_sip3d 가 5.0 을 **넘어야**
+#          한다. flag 없이 만든 tree 는 여기서만 실패하고 나머지는 다 통과한다.
+#       2. tight 은 **불변이 아니다**. SIP3D<3 이 빠졌으므로 tight 이 늘어난다.
+#          기존 parquet 안에서 tight 만 재정의했을 때 weighted tight fraction 이
+#          QCD 0.2646 -> 0.3690, TTLJ 0.1598 -> 0.2380 이었으므로, 새 tree 는
+#          loose 가 더 넓어진 만큼 이보다 낮게 나와야 한다.
+#       3. Observed 도 불변이 아니다 — fake.cc 의 "loose muon 정확히 1개" 가
+#          양방향으로 재배열된다. 흡수하지 말고 보고할 것 (RESULTS.md 4ae).
+#       4. 공식 FR map 은 이 WP 에 없다. flat 은 QCD 에서 재측정한다
+#          (compare.official_json: null, --source-ntuples 필수).
+
+# ---------------------------------------------------------------------------
+# (2026-10-05) nffpv — analysis WP 그대로 + primary vertex branch.
+#
+#     fake.cc 의 기본값을 analysis WP (257613c) 로 되돌렸다:
+#       loose = POG Medium + |dZ|<0.1 + TkRelIso<0.4 + |SIP3D|<5 + miniiso<0.6
+#       tight = |SIP3D|<3 + miniiso<0.1, Mu8+Mu17 를 conePt 30 에서 stitch,
+#       muon pT >= 10, source jet 컷 없음.
+#     jet-pT-binned FR study (nffj / nffj2: PF-iso WP, Mu17 만, muon pT>=20,
+#     source jet pT>30) 는 이제 **--userflags MakeTree,JetBinWP** 로만 나온다.
+#     (closnff 도 같은 JetBinWP flag 로 짝을 맞춘다.) 로컬 1-파일 검사에서
+#     JetBinWP 출력은 이전 HEAD 와 tree branch 129개 + histogram 130개가 모두
+#     같고, 기본값 출력은 ntuples_nff 의 같은 이벤트 행과 112 컬럼이 모두 같다.
+#
+#     새 tree branch: ev_pvScore (PV sum pt^2), ev_pvNdof, ev_pvChi2, ev_pvX/Y/Z,
+#     ev_pvNpvs, ev_pvNpvsGood (진짜 vertex 수 — ev_nPV 는 실은 Pileup_nPU),
+#     ev_genVtxX/Y/Z (MC 진단 전용, gen truth 라 네트워크 입력 금지).
+#     왜: 같은 conePt 에서 QCD 와 ttbar 의 SIP3D 가 다른 원인 중 하나가 PV
+#     해상도 (SIP3D 오차에 PV 오차가 들어간다) — neuralff Case 3 (SIP3D label)
+#     에서 sv3 + PV 입력을 시험한다.
+#
+#     Run 2 4 era, 16 submission. 출력 /gv0/.../fake/MakeTree/{era}_nffpv/
+#for ERA in 2016preVFP 2016postVFP 2017 2018; do
+#SKNano.py -a fake -i 'QCD_Pt-*MuEnriched*' -e $ERA -n 40 --userflags MakeTree --tag nffpv
+#SKNano.py -a fake -i TTLJ_powheg           -e $ERA -n 40 --userflags MakeTree --tag nffpv
+#SKNano.py -a fake -i DYJets                -e $ERA -n 40 --userflags MakeTree --tag nffpv
+#SKNano.py -a fake -i DYJets10to50          -e $ERA -n 40 --userflags MakeTree --tag nffpv
+#done
+#
+#     gate: 새 parquet 의 행 (run, lumi, evt, mu_eta) 과 공통 컬럼이 ntuples_nff
+#     (QCD, TTLJ) / ntuples_nffdy (DY) 와 같아야 한다 — 바뀐 것은 branch 추가뿐.
+
+# --- nffsv (2026-10-06): nff 에 SV 변수 9 개(sv_charge/ndof/dlen/dxy/eta/phi/x/y/z) 추가 (SKNanoLoader 에 SV_* 7 개 bind 추가).
+#     MC only, Run2 4 era x {QCD, TTLJ, DYJets, DYJets10to50} = 16 submit. 출력: .../fake/MakeTree/{era}_nffsv/
+#for ERA in 2016preVFP 2016postVFP 2017 2018; do
+#SKNano.py -a fake -i 'QCD_Pt-*MuEnriched*' -e $ERA -n 40 --userflags MakeTree --tag nffsv
+#SKNano.py -a fake -i TTLJ_powheg           -e $ERA -n 40 --userflags MakeTree --tag nffsv
+#SKNano.py -a fake -i DYJets                -e $ERA -n 40 --userflags MakeTree --tag nffsv
+#SKNano.py -a fake -i DYJets10to50          -e $ERA -n 40 --userflags MakeTree --tag nffsv
+#done

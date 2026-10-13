@@ -15,6 +15,13 @@
 //   (플래그 없음) - 두 경로 모두 측정
 //   away jet pT 변화 (30 / 60 GeV) 시스테마틱은 항상 채운다
 //   MakeTree     - flavor BDT 학습용 flat ntuple ("mu" 트리) 를 추가로 쓴다
+//   MatchWP      - Run 2 / Run 3 muon loose WP 을 교집합 (SIP3D<5, miniiso<0.4) 으로
+//   Run2WP       - Run 3 muon loose WP 을 Run 2 것 (SIP3D<5, miniiso<0.6) 으로
+//   JetBinWP     - jet-pT-binned FR study (tags nffj / nffj2): PF-iso WP
+//                  (loose PfRelIso04<0.4, tight <0.1, no SIP3D/miniiso), conePt 를
+//                  PfRelIso04 로, muon pT>=20, Mu17 만 (conePt 컷 없음), source jet
+//                  pT>30. 플래그가 없으면 analysis WP (SIP3D + miniiso) 와 Mu8+Mu17
+//                  stitch 그대로다.
 //==============================================================
 class fake : public AnalyzerCore {
 public:
@@ -35,6 +42,7 @@ public:
     // Userflags
     bool MeasFakeMu8, MeasFakeMu17;
     bool MakeTree;   // flavor BDT 학습용 flat ntuple 출력
+    bool JetBinWP;   // jet-pT-binned FR study 의 WP / selection (위 설명)
 
     // 트리거 경로 / 시스테마틱 / binning
     vector<TriggerPath> paths;
@@ -49,16 +57,26 @@ public:
     // Analysis cuts (analysis note 의 WP 표 + 측정영역 정의)
     struct AnalysisCuts {
         // muon 공통: POG medium ID + 아래 컷
-        // pT > 20 (10 아니다): jet-less muon 을 피하려고 올렸다 — 낮은 pT muon 은
-        // 소속 PF jet 이 매칭 안 되는 (JetIdx 없음/jetPt<15GeV라 컬렉션에 없음)
-        // 비율이 커서 flavour 기반 FR 연구의 muon 대부분을 못 쓰게 만든다.
-        float muon_pt_min    = 20.0;
+        // JetBinWP 에서는 initializeAnalyzer 가 20 으로 올린다: jet-less muon 을
+        // 피하려고 — 낮은 pT muon 은 소속 PF jet 이 매칭 안 되는 (JetIdx 없음/
+        // jetPt<15GeV라 컬렉션에 없음) 비율이 커서 jet-pT binning 을 못 쓴다.
+        float muon_pt_min    = 10.0;
         float muon_eta_max   =  2.4;
         float muon_dz_max    =  0.1;   // cm
         float muon_tkiso_max =  0.4;   // rel. tracker iso R03 (trigger emulation)
-        // tight / loose WP: PF relative iso (R=0.4) only, no SIP3D/MiniIso,
-        // Run-independent (jet-pT-binned FR study, replaces the old
-        // SIP3D+MiniIso WP everywhere)
+        // tight WP
+        float tight_sip3d_max   = 3.0;
+        float tight_miniiso_max = 0.1;
+        // loose WP (Run 2)
+        // loose WP: **Run 별로 다르다** (공식 MeasFakeRateV4 는
+        //   Run2 -> Muon::Pass_HcToWALooseRun2 (SIP3D<5, miniiso<0.6)
+        //   Run3 -> Muon::Pass_HcToWALooseRun3 (SIP3D<8, miniiso<0.4)
+        // 를 쓴다). 아래는 Run2 기본값이고 Run3 값은 initializeAnalyzer 에서
+        // 덮어쓴다. tight WP 은 Run 무관하게 같다.
+        float loose_sip3d_max   = 5.0;
+        float loose_miniiso_max = 0.6;
+        // JetBinWP 의 tight / loose WP: PF relative iso (R=0.4) only, no
+        // SIP3D/MiniIso, Run-independent
         float tight_pfreliso_max = 0.1;
         float loose_pfreliso_max = 0.4;
         // electron veto (공식 측정의 veto electron 과 동일: pT > 10)
@@ -72,7 +90,7 @@ public:
         float jet_eta_max  =  2.4;   // 2016: 2.4, 그 외: 2.5 (initializeAnalyzer 에서 설정)
         float jet_lep_dr   =  0.4;   // lepton 과 겹치는 jet 제거
         float awayjet_pt   = 40.0;   // Central away jet pT 컷
-        float srcjet_pt_min = 30.0;  // muon 의 source jet (jetIdx, cleaning 이전) pT 컷 — conePt 컷 대신
+        float srcjet_pt_min = 30.0;  // JetBinWP 만: muon 의 source jet (jetIdx, cleaning 이전) pT 컷 — conePt 컷 대신
         float awayjet_dr   =  0.7;   // dR(mu, away jet)
         // 측정 영역 (W/Z prompt 오염 억제)
         float met_max = 25.0;
@@ -98,6 +116,9 @@ public:
 
     // Helper functions
     bool PassMuonWP(const Muon &mu, const TString &wp) const;
+    //   cone-corrected pT = pT * (1 + max(0, iso - tight iso cut)); iso 는 WP 의
+    //   isolation (기본 miniiso, JetBinWP 에서 PfRelIso04). 측정과 트리가 같이 쓴다
+    float PtCorr(const Muon &mu) const;
     bool PassElectronVeto(const Electron &el) const;
     bool PassVetoMapJet(const Jet &jet, const RVec<Muon> &muons) const;
     void measureFakeRate(const TriggerPath &path, float weight);

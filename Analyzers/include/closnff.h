@@ -79,7 +79,10 @@
 //  같아서 loose WP 과 동치였다. 그래서 3Mu 의 electron veto 는 이 교체로
 //  달라지지 않는다 — 3Mu 결과가 움직이면 그건 버그다.)
 //
-// Userflags: OpenJet 하나만 있다 (tree 는 항상 쓴다).
+// Userflags (tree 는 항상 쓴다):
+//   MatchWP / Run2WP / JetBinWP 는 fake.cc 와 같은 이름, 같은 값 (muon WP).
+//   JetBinWP = PF-iso WP (loose PfRelIso04<0.4, tight <0.1), conePt 를 PfRelIso04 로,
+//   muon pT>=20 — jet-pT-binned FR study 와 짝을 맞출 때만 준다.
 //   OpenJet 은 jet >= 2 && b-jet >= 1 를 끄고 그 판단을 offline 로 넘긴다.
 //   ttbar 의 Fig. 50 영역은 top 에 맞춰진 것이라 DY 에 그대로 쓰면
 //   b 가 거의 없어 통계가 남지 않는다. ev_njet / ev_nbjet 는 이미
@@ -103,6 +106,7 @@ public:
     //     넘겨 hold 된다. closos/closdimu 는 이 flag 를 주지 않으면 되므로
     //     기존 동작은 한 비트도 바뀌지 않는다.
     bool Skip2Mu = false;
+    bool JetBinWP = false;   // fake.cc 의 JetBinWP 와 같은 muon WP
 
     //==== era 별 HLT 경로 (TriLeptonBase.cc 와 동일)
     RVec<TString> DblMuTriggers;   // 3Mu 채널
@@ -122,14 +126,24 @@ public:
     //   muon WP 값은 fake.h::AnalysisCuts 와 같은 숫자여야 한다 (위 주석 참고).
     struct AnalysisCuts {
         // muon 공통: POG medium ID + 아래 컷
-        // pT > 20 (10 아니다) — fake.h 와 같은 값, 같은 이유 (jet-less muon 회피).
-        float muon_pt_min    = 20.0;
+        // JetBinWP 에서는 20 — fake.h 와 같은 값, 같은 이유 (jet-less muon 회피).
+        float muon_pt_min    = 10.0;
         float muon_eta_max   =  2.4;
         float muon_dz_max    =  0.1;   // cm
         float muon_tkiso_max =  0.4;   // rel. tracker iso R03 (trigger emulation)
-        // tight / loose WP: PF relative iso (R=0.4) only, no SIP3D/MiniIso,
-        // Run-independent (jet-pT-binned FR study, replaces the old
-        // SIP3D+MiniIso WP everywhere) — fake.h 와 글자 그대로 같은 값.
+        // tight WP
+        float tight_sip3d_max   = 3.0;
+        float tight_miniiso_max = 0.1;
+        // loose WP (Run 2)
+        // loose WP: **Run 별로 다르다** (공식 MeasFakeRateV4 는
+        //   Run2 -> Muon::Pass_HcToWALooseRun2 (SIP3D<5, miniiso<0.6)
+        //   Run3 -> Muon::Pass_HcToWALooseRun3 (SIP3D<8, miniiso<0.4)
+        // 를 쓴다). 아래는 Run2 기본값이고 Run3 값은 initializeAnalyzer 에서
+        // 덮어쓴다. tight WP 은 Run 무관하게 같다.
+        float loose_sip3d_max   = 5.0;
+        float loose_miniiso_max = 0.6;
+        // JetBinWP 의 tight / loose WP: PF relative iso (R=0.4) only, no
+        // SIP3D/MiniIso, Run-independent — fake.h 와 글자 그대로 같은 값.
         float tight_pfreliso_max = 0.1;
         float loose_pfreliso_max = 0.4;
         // electron (elecfake.cc::AnalysisCuts 와 같은 숫자)
@@ -172,6 +186,7 @@ public:
 
     //==== 측정 analyzer 와 글자 그대로 같은 helper (WP 이 어긋나면 안 된다)
     bool PassMuonWP(const Muon &mu, const TString &wp) const;        // fake.cc
+    float PtCorr(const Muon &mu) const;                               // fake.cc
     bool PassElectronWP(const Electron &el, const TString &wp) const; // elecfake.cc
     bool PassVetoMapJet(const Jet &jet, const RVec<Muon> &muons) const;
 

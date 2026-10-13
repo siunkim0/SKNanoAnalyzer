@@ -662,6 +662,13 @@ void SKNanoLoader::SetMaxLeafSize(){
         SV_chi2.resize(kMaxSV);
         SV_pAngle.resize(kMaxSV);
         SV_ntracks.resize(kMaxSV);
+        SV_charge.resize(kMaxSV);
+        SV_ndof.resize(kMaxSV);
+        SV_dlen.resize(kMaxSV);
+        SV_dxy.resize(kMaxSV);
+        SV_x.resize(kMaxSV);
+        SV_y.resize(kMaxSV);
+        SV_z.resize(kMaxSV);
         FatJet_jetId_RunII.resize(0);
         FatJet_particleNetMD_QCD.resize(0);
         FatJet_particleNetMD_Xbb.resize(0);
@@ -725,6 +732,13 @@ void SKNanoLoader::SetMaxLeafSize(){
         SV_chi2.resize(kMaxSV);
         SV_pAngle.resize(kMaxSV);
         SV_ntracks.resize(kMaxSV);
+        SV_charge.resize(kMaxSV);
+        SV_ndof.resize(kMaxSV);
+        SV_dlen.resize(kMaxSV);
+        SV_dxy.resize(kMaxSV);
+        SV_x.resize(kMaxSV);
+        SV_y.resize(kMaxSV);
+        SV_z.resize(kMaxSV);
         FatJet_jetId_RunII.resize(kMaxFatJet);
         FatJet_particleNetMD_QCD.resize(kMaxFatJet);
         FatJet_particleNetMD_Xbb.resize(kMaxFatJet);
@@ -1012,6 +1026,9 @@ void SKNanoLoader::InitTTreeReader() {
     BindArray("GenVisTau_status", GenVisTau_status, &nGenVisTau, "nGenVisTau");
 
     // GenVtx
+    BindScalar("GenVtx_x", GenVtx_x);
+    BindScalar("GenVtx_y", GenVtx_y);
+    BindScalar("GenVtx_z", GenVtx_z);
 
     // PileUp & others
     BindScalar("Pileup_nPU", Pileup_nPU);
@@ -1376,6 +1393,13 @@ void SKNanoLoader::InitTTreeReader() {
     BindArray("SV_chi2", SV_chi2, &nSV, "nSV");
     BindArray("SV_pAngle", SV_pAngle, &nSV, "nSV");
     BindArray("SV_ntracks", SV_ntracks, &nSV, "nSV");
+    BindArray("SV_charge", SV_charge, &nSV, "nSV");
+    BindArray("SV_ndof", SV_ndof, &nSV, "nSV");
+    BindArray("SV_dlen", SV_dlen, &nSV, "nSV");
+    BindArray("SV_dxy", SV_dxy, &nSV, "nSV");
+    BindArray("SV_x", SV_x, &nSV, "nSV");
+    BindArray("SV_y", SV_y, &nSV, "nSV");
+    BindArray("SV_z", SV_z, &nSV, "nSV");
 
     // MET----------------------------
     BindScalar("MET_pt", MET_pt);
@@ -1665,6 +1689,9 @@ void SKNanoLoader::InitLegacy() {
     }
 
     // GenVtx
+    SafeSetBranchAddress("GenVtx_x", &GenVtx_x);
+    SafeSetBranchAddress("GenVtx_y", &GenVtx_y);
+    SafeSetBranchAddress("GenVtx_z", &GenVtx_z);
 
     // PileUp & others
     SafeSetBranchAddress("Pileup_nPU", &Pileup_nPU);
@@ -2015,6 +2042,13 @@ void SKNanoLoader::InitLegacy() {
     SafeSetBranchAddress("SV_chi2", SV_chi2.data());
     SafeSetBranchAddress("SV_pAngle", SV_pAngle.data());
     SafeSetBranchAddress("SV_ntracks", SV_ntracks.data());
+    SafeSetBranchAddress("SV_charge", SV_charge.data());
+    SafeSetBranchAddress("SV_ndof", SV_ndof.data());
+    SafeSetBranchAddress("SV_dlen", SV_dlen.data());
+    SafeSetBranchAddress("SV_dxy", SV_dxy.data());
+    SafeSetBranchAddress("SV_x", SV_x.data());
+    SafeSetBranchAddress("SV_y", SV_y.data());
+    SafeSetBranchAddress("SV_z", SV_z.data());
 
     // MET----------------------------
     SafeSetBranchAddress("MET_pt", &MET_pt);

@@ -201,7 +201,10 @@ public:
     RVec<Short_t> Buf_GenVisTau_genPartIdxMother;
     RVec<UChar_t> Buf_GenVisTau_status;
 
-    // GenVtx -> Need Update
+    // GenVtx (MC only; DATA keeps the -999 default -- the branch is absent)
+    Float_t GenVtx_x = -999.;
+    Float_t GenVtx_y = -999.;
+    Float_t GenVtx_z = -999.;
 
     //L1Prefire-------------------------
     Float_t L1PreFiringWeight_Nom;
@@ -609,6 +612,13 @@ public:
     RVec<Float_t> SV_chi2;
     RVec<Float_t> SV_pAngle;
     RVec<UChar_t> SV_ntracks;
+    RVec<Int_t>   SV_charge;
+    RVec<Float_t> SV_ndof;
+    RVec<Float_t> SV_dlen;
+    RVec<Float_t> SV_dxy;
+    RVec<Float_t> SV_x;
+    RVec<Float_t> SV_y;
+    RVec<Float_t> SV_z;
 
     // MET
     Float_t MET_pt;
