@@ -54,6 +54,15 @@
 //     그 값이 아니라 channel 로 걸러야 한다.
 //     nonprompt_* = fail 한 muon (fail 이 하나일 때), 아니면 subleading.
 //
+//   channel = 4 (2E1Mu, 2026-10-13): Z->ee tag + muon 하나 (fake 후보)
+//     loose muon 1개, loose electron 2개 == veto electron 2개
+//     DoubleEG trigger (Ele23_Ele12, _DZ 와 non-DZ OR), e pT > 25 / 15
+//     q(e1) + q(e2) == 0, M(ee) > 12 GeV -> pair_mass / pair_pt / ZCand_*
+//     Z 질량 창과 electron tight 는 tree 에서 자르지 않는다 (offline:
+//     |pair_mass - 91.2| < 15, el1/el2_isTight). 두 electron 이 tight 이면
+//     fail 할 수 있는 것은 muon 하나뿐 -> muon fake factor 만으로 closure.
+//     nonprompt_* = 그 muon (slot 1). el2_* slot 은 이 채널에서만 채워진다.
+//
 //   공통: jet >= 2, b-jet (DeepJet Medium) >= 1  (userflag OpenJet 으로 끔)
 //         MET 컷 없음, MT 컷 없음, Z veto 없음
 //
@@ -111,6 +120,13 @@ public:
     //==== era 별 HLT 경로 (TriLeptonBase.cc 와 동일)
     RVec<TString> DblMuTriggers;   // 3Mu 채널
     RVec<TString> EMuTriggers;     // 1E2Mu 채널
+    //   2E1Mu 채널 (channel 4): Z->ee 를 electron 두 개로 tag 하고 muon 하나가
+    //   fake 후보다. trigger 는 DoubleEG (Ele23_Ele12) — Z 의 두 electron 이
+    //   쏘므로 fake muon 에는 trigger 요구가 걸리지 않는다. SKNanoLoader 는
+    //   HLT_Path.json 에서 "active": true 인 경로만 읽으므로 (아니면
+    //   PassTrigger -> "not found" -> false) Run 2 네 era 의 두 경로를 active
+    //   로 켰다 (2026-10-13).
+    RVec<TString> DblEGTriggers;   // 2E1Mu 채널
     //   2Mu 채널은 **unprescaled single muon** trigger 를 쓴다 (bkg.cc:14-22 와
     //   글자 그대로 같다). 하나만 쏘면 되고 HLT leg 이 tight isolation 이라
     //   사실상 언제나 prompt muon 이 쏜다 — 즉 **fake muon 에는 trigger 요구가
@@ -164,6 +180,9 @@ public:
         float emu_sub_el_pt  = 15.0;
         float emu_lead_el_pt = 25.0;
         float emu_sub_mu_pt  = 10.0;
+        // 2E1Mu (Z->ee tag + fake muon): HLT_Ele23_Ele12 의 trigger-safe 문턱
+        float ee_lead_el_pt = 25.0;
+        float ee_sub_el_pt  = 15.0;
         float pair_mass_min = 12.0;
         int   n_jet_min     = 2;
         int   n_bjet_min    = 1;

@@ -612,3 +612,23 @@
 #SKNano.py -a fake -i DYJets                -e $ERA -n 40 --userflags MakeTree --tag nffsv
 #SKNano.py -a fake -i DYJets10to50          -e $ERA -n 40 --userflags MakeTree --tag nffsv
 #done
+
+# ---------------------------------------------------------------------------
+# (2026-10-13) closdyee — closnff 의 새 channel 4 = 2E1Mu (Z->ee tag + muon 하나).
+#     3Mu DY closure 의 두 문제 — 어느 muon 이 fake 인지 모호함, tight 를 실패한
+#     prompt Z muon 의 sideband 오염 — 가 없다: offline 에서 두 electron 을
+#     tight + |m_ee - 91.2| < 15 로 요구하면 fail 할 수 있는 것은 muon 하나뿐이고
+#     matrix method 에는 muon fake factor 만 들어간다 (electron FR 불필요).
+#     trigger 는 DoubleEG (HLT_Ele23_Ele12_CaloIdL_TrackIdL_IsoVL, _DZ 와 non-DZ OR),
+#     e pT > 25 / 15. 두 경로를 Run 2 네 era 의 data/.../Trigger/HLT_Path.json 에서
+#     "active": true 로 켰다 — 아니면 SKNanoLoader 가 branch 를 읽지 않아 채널이 빈다.
+#     로컬 6 파일(2018 DYJets): 2E1Mu 16 행, 두 e tight + Z 창 12 행, muon 은 전부
+#     hadron daughter (leptonType -2). 3Mu 27 행의 약 0.45 배.
+#     channel 0-3 행은 이전 closnff 와 한 비트도 같다 (로컬 1-파일 검사, 249 branch).
+#     tree 에 el2_* slot 이 새로 생긴다 (2E1Mu 외 채널에서는 sentinel).
+#     Run 2 4 era x 2 sample = 8 submission.
+#     출력: /gv0/.../closnff/OpenJet_Skip2Mu/{era}_closdyee/  (userflag 가 directory level)
+#for ERA in 2016preVFP 2016postVFP 2017 2018; do
+#SKNano.py -a closnff -i DYJets       -e $ERA -n 40 --userflags OpenJet,Skip2Mu --tag closdyee
+#SKNano.py -a closnff -i DYJets10to50 -e $ERA -n 40 --userflags OpenJet,Skip2Mu --tag closdyee
+#done

@@ -47,6 +47,12 @@ void closnff::initializeAnalyzer() {
                        "HLT_Mu8_TrkIsoVVL_Ele23_CaloIdL_TrackIdL_IsoVL_DZ"};
     }
 
+    //==== 2E1Mu 채널의 trigger: DoubleEG. 두 경로 모두 Run 2 네 era 의 DY
+    //==== NanoAOD 에 있고 HLT_Path.json 에 full lumi + "active": true 이다
+    //==== (2016 은 _DZ, 2017/18 은 non-DZ 가 표준이라 OR). Run 3 는 아직 안 쓴다.
+    DblEGTriggers = {"HLT_Ele23_Ele12_CaloIdL_TrackIdL_IsoVL_DZ",
+                     "HLT_Ele23_Ele12_CaloIdL_TrackIdL_IsoVL"};
+
     //==== 2Mu 채널의 trigger: unprescaled single muon. bkg.cc:14-22 와 동일하게
     //==== 맞춰야 bkg.cc 영역이 offline slice 로 정확히 재현된다.
     if (DataEra == "2016preVFP" || DataEra == "2016postVFP") {
@@ -300,19 +306,28 @@ void closnff::executeEvent() {
     const bool is3Mu   = (looseMuons.size() == 3 && vetoElectrons.size() == 0);
     const bool is1E2Mu = (looseMuons.size() == 2 && vetoElectrons.size() == 1
                                                  && looseElectrons.size() == 1);
+    //==== 2E1Mu (channel 4, 2026-10-13): Z->ee + 1 muon. muon 이 fake 후보이고
+    //     electron 두 개가 Z 를 tag 한다. 3Mu 의 두 문제 — 어느 muon 이 fake
+    //     인지의 모호함과, tight 를 실패한 prompt Z muon 의 sideband 오염 — 가
+    //     구조적으로 없다 (electron 두 개를 offline 에서 tight 로 요구하면 fail
+    //     할 수 있는 것은 muon 하나뿐이다). muon 개수 1 이라 다른 채널과 배타적.
+    //     Z 질량 창 / electron tight 는 tree 에서 자르지 않고 offline 에서 건다
+    //     (pair_mass, el1/el2_isTight).
+    const bool is2E1Mu = (looseMuons.size() == 1 && vetoElectrons.size() == 2
+                                                 && looseElectrons.size() == 2);
     //==== (cutflow) loose muon 개수 분포 + 3Mu 의 두 multiplicity 단계
     FillHist("CutFlow_nLooseMu", min((int)looseMuons.size(), 5) + 0.5, cfW, 6, 0., 6.);
     if (looseMuons.size() == 3) {
         FillHist("CutFlow_3Mu", 3.5, cfW, 10, 0., 10.);
         if (is3Mu) FillHist("CutFlow_3Mu", 4.5, cfW, 10, 0., 10.);
     }
-    if (!is2Mu && !is3Mu && !is1E2Mu) return;
+    if (!is2Mu && !is3Mu && !is1E2Mu && !is2E1Mu) return;
     //==== --userflags Skip2Mu: OS 2Mu 행만 버린다. 그 채널이 트리의 99.9% 를
     //     차지해 hadd 를 8 GB cgroup 한계로 밀어넣던 prompt Z 벌크이고,
     //     SS 는 그 벌크가 아니라 우리가 원하는 fake 영역이다. 3Mu / 1E2Mu /
     //     SS 출력은 그대로다.
     if (Skip2Mu && is2MuOS) return;
-    const int channel = is3Mu ? 0 : (is1E2Mu ? 1 : (is2MuOS ? 2 : 3));
+    const int channel = is3Mu ? 0 : (is1E2Mu ? 1 : (is2E1Mu ? 4 : (is2MuOS ? 2 : 3)));
 
     //==== Step 4: trigger (채널마다 다르다)
     //   FR 측정 경로(Mu8/Mu17)는 **아무것도 걸지 않고** 매 row 기록만 한다.
@@ -326,7 +341,8 @@ void closnff::executeEvent() {
 
     bool passTrig = false;
     for (const auto &trig : (is3Mu ? DblMuTriggers
-                                   : (is1E2Mu ? EMuTriggers : SglMuTriggers)))
+                                   : (is1E2Mu ? EMuTriggers
+                                              : (is2E1Mu ? DblEGTriggers : SglMuTriggers))))
         if (ev.PassTrigger(trig)) { passTrig = true; break; }
     if (!passTrig) return;
     if (is3Mu) FillHist("CutFlow_3Mu", 5.5, cfW, 10, 0., 10.);
@@ -343,6 +359,11 @@ void closnff::executeEvent() {
         //==== out-of-range 로 죽는다.
         if (!(looseMuons.at(0).Pt() > sgl_lead_mu_pt)) return;
         if (!(looseMuons.at(1).Pt() > cuts.sub_mu_pt)) return;
+    } else if (is2E1Mu) {
+        //==== Ele23_Ele12 의 trigger-safe 문턱 (25 / 15). muon 은 object 문턱(10) 만.
+        //==== 이 분기가 아래 1E2Mu else 보다 먼저 와야 한다 (그쪽은 muon 둘을 본다).
+        if (!(looseElectrons.at(0).Pt() > cuts.ee_lead_el_pt)) return;
+        if (!(looseElectrons.at(1).Pt() > cuts.ee_sub_el_pt))  return;
     } else {
         //==== 비대칭 leg 두 개의 OR (EMu trigger 의 두 경로에 대응). mu2 는
         //==== object 문턱(10) 말고 따로 컷이 없다 — ClosFakeRate 와 같다.
@@ -473,6 +494,24 @@ void closnff::executeEvent() {
         nonpromptPhi = scaled.at(k).Phi();
         nonpromptFlavor = 0;
         nonpromptSlot   = k + 1;
+    } else if (is2E1Mu) {
+        //   2E1Mu: OS electron pair 가 Z 후보 (M > 12; Z 질량 창은 offline,
+        //   pair_mass 로). pair 는 원래 4-vector 로 만든다 — tight electron
+        //   (miniIso < 0.1) 에서는 cone 보정이 0 이라 Z peak 이 그대로 나온다.
+        const Electron &e0 = looseElectrons.at(0);
+        const Electron &e1 = looseElectrons.at(1);
+        if (!(e0.Charge() + e1.Charge() == 0)) return;
+        pair_emu = e0 + e1;
+        if (!(pair_emu.M() > cuts.pair_mass_min)) return;
+        ZCand  = pair_emu;
+        trilep = e0 + e1 + scaled.at(0);
+
+        //   fake 후보는 유일한 muon (slot 1). conePt 로 스케일된 값.
+        nonpromptPt  = scaled.at(0).Pt();
+        nonpromptEta = scaled.at(0).Eta();
+        nonpromptPhi = scaled.at(0).Phi();
+        nonpromptFlavor = 0;
+        nonpromptSlot   = 1;
     } else {
         //   1E2Mu: OS muon pair 하나, M > 12. Z veto 도 두 번째 pair 도 없다.
         if (!(scaled.at(0).Charge() + scaled.at(1).Charge() == 0)) return;
@@ -526,7 +565,7 @@ void closnff::executeEvent() {
     //==== 이하 tree 기록. **모든 브랜치를 매 row 무조건 쓴다** —
     //==== SetBranch 가 deque 에 push 하고 FillTrees 가 비우는 구조라
     //==== 조건부로 건너뛰면 다음 row 의 주소가 어긋난다.
-    SetBranch(TREE, "channel",  channel);          // 0 = 3Mu, 1 = 1E2Mu
+    SetBranch(TREE, "channel",  channel);          // 0 = 3Mu, 1 = 1E2Mu, 2/3 = 2Mu OS/SS, 4 = 2E1Mu
     SetBranch(TREE, "region",   region);
     SetBranch(TREE, "n_fail",   nFail);
     SetBranch(TREE, "n_loose",  (int)(looseMuons.size() + looseElectrons.size()));
@@ -582,9 +621,12 @@ void closnff::executeEvent() {
     //==== lepton slot 의 FR 입력 feature.
     //   브랜치 목록은 채널과 무관하게 항상 mu1/mu2/mu3 + el1 로 고정한다.
     //   3Mu 는 el1 이, 1E2Mu 는 mu3 이 sentinel 이다 (nullptr -> sentinel).
+    //   el2 (2026-10-13) 는 2E1Mu 의 두 번째 electron 이고 다른 채널에서는 sentinel.
+    //   매 row 무조건 쓴다 (SetBranch deque 불변식).
     for (int i = 0; i < 3; i++)
         fillMuonSlot(i + 1, i < (int)looseMuons.size() ? &looseMuons.at(i) : nullptr);
-    fillElectronSlot(1, is1E2Mu ? &looseElectrons.at(0) : nullptr);
+    fillElectronSlot(1, (is1E2Mu || is2E1Mu) ? &looseElectrons.at(0) : nullptr);
+    fillElectronSlot(2, is2E1Mu ? &looseElectrons.at(1) : nullptr);
 
     FillTrees(TREE);
 }

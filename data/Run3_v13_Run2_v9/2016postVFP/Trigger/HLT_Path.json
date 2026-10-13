@@ -1100,7 +1100,8 @@
         "lumi": 16812.151722482
     },
     "HLT_Ele23_Ele12_CaloIdL_TrackIdL_IsoVL_DZ": {
-        "lumi": 16812.151722482
+        "lumi": 16812.151722482,
+        "active": true
     },
     "HLT_Ele23_Ele12_CaloIdL_TrackIdL_IsoVL_DZ_L1JetTauSeeded": {
         "lumi": 16812.151722482
@@ -1203,7 +1204,8 @@
         "lumi": 16812.151722482
     },
     "HLT_Ele23_Ele12_CaloIdL_TrackIdL_IsoVL": {
-        "lumi": 16812.151722482
+        "lumi": 16812.151722482,
+        "active": true
     },
     "HLT_Ele12_CaloIdL_TrackIdL_IsoVL": {
         "lumi": 16812.151722482
