@@ -56,7 +56,10 @@
 //
 //   channel = 4 (2E1Mu, 2026-10-13): Z->ee tag + muon 하나 (fake 후보)
 //     loose muon 1개, loose electron 2개 == veto electron 2개
-//     DoubleEG trigger (Ele23_Ele12, _DZ 와 non-DZ OR), e pT > 25 / 15
+//     single-electron trigger (2026-10-28; 2016 Ele27_WPTight, 2017
+//     Ele32_WPTight_L1DoubleEG, 2018 Ele32_WPTight), e pT > 30|35 / 15.
+//     2017 에 DoubleEG PD 가 없어 네 era 를 한 PD (SingleElectron / 2018
+//     EGamma) 로 맞췄다. 그 전 (tag closdyee) 은 DoubleEG Ele23_Ele12, 25 / 15.
 //     q(e1) + q(e2) == 0, M(ee) > 12 GeV -> pair_mass / pair_pt / ZCand_*
 //     Z 질량 창과 electron tight 는 tree 에서 자르지 않는다 (offline:
 //     |pair_mass - 91.2| < 15, el1/el2_isTight). 두 electron 이 tight 이면
@@ -121,12 +124,12 @@ public:
     RVec<TString> DblMuTriggers;   // 3Mu 채널
     RVec<TString> EMuTriggers;     // 1E2Mu 채널
     //   2E1Mu 채널 (channel 4): Z->ee 를 electron 두 개로 tag 하고 muon 하나가
-    //   fake 후보다. trigger 는 DoubleEG (Ele23_Ele12) — Z 의 두 electron 이
-    //   쏘므로 fake muon 에는 trigger 요구가 걸리지 않는다. SKNanoLoader 는
-    //   HLT_Path.json 에서 "active": true 인 경로만 읽으므로 (아니면
-    //   PassTrigger -> "not found" -> false) Run 2 네 era 의 두 경로를 active
-    //   로 켰다 (2026-10-13).
-    RVec<TString> DblEGTriggers;   // 2E1Mu 채널
+    //   fake 후보다. trigger 는 unprescaled single electron (2026-10-28) — Z 의
+    //   electron 이 쏘므로 fake muon 에는 trigger 요구가 걸리지 않는다. DoubleEG
+    //   (Ele23_Ele12) 였으나 2017 DoubleEG PD 가 sample DB 에 없어 데이터 검증을
+    //   네 era 에서 하려고 바꿨다. 세 경로 모두 HLT_Path.json 에서 full lumi +
+    //   "active": true 다 (SKNanoLoader 는 active 경로만 읽는다).
+    RVec<TString> SglElTriggers;   // 2E1Mu 채널
     //   2Mu 채널은 **unprescaled single muon** trigger 를 쓴다 (bkg.cc:14-22 와
     //   글자 그대로 같다). 하나만 쏘면 되고 HLT leg 이 tight isolation 이라
     //   사실상 언제나 prompt muon 이 쏜다 — 즉 **fake muon 에는 trigger 요구가
@@ -180,8 +183,9 @@ public:
         float emu_sub_el_pt  = 15.0;
         float emu_lead_el_pt = 25.0;
         float emu_sub_mu_pt  = 10.0;
-        // 2E1Mu (Z->ee tag + fake muon): HLT_Ele23_Ele12 의 trigger-safe 문턱
-        float ee_lead_el_pt = 25.0;
+        // 2E1Mu (Z->ee tag + fake muon): single-electron trigger 의 trigger-safe
+        // 문턱. 2016 (Ele27) 30, 2017/2018 (Ele32) 35 — initializeAnalyzer 에서 era 별로
+        float ee_lead_el_pt = 35.0;
         float ee_sub_el_pt  = 15.0;
         float pair_mass_min = 12.0;
         int   n_jet_min     = 2;
@@ -213,6 +217,13 @@ public:
     //==== 공유하지 않고 복사한 이유는 PassMuonWP 과 같다: 두 analyzer 는 framework
     //==== 와는 달라져도 서로와는 절대 달라지면 안 된다.
     int FlavorCode(const Jet *jet) const;
+    //   AnalyzerCore::GetLeptonType 를 감싼다 (2026-10-28). 그 photon 경로
+    //   (gen lepton 매칭이 없을 때) 의 IsFinalPhotonSt23_Public 이 mother index 를
+    //   확인하지 않고 gens.at(-1) 을 불러 Z+gamma 샘플 (ZGToLLG) 에서 std::out_of_range
+    //   로 job 이 죽는다. framework 는 건드리지 않고 여기서 잡아 0 ("Error",
+    //   non-prompt) 을 돌려준다 — 그 경로는 애초에 gen lepton 매칭이 없는 lepton 이다.
+    int SafeLeptonType(const Lepton &lep, const RVec<Gen> &gens);
+    long nLeptonTypeCaught = 0;
 
     //==== ClosFakeRate::configureChargeOf 와 동일: (ss1, ss2, os) 로 정렬
     std::tuple<Muon, Muon, Muon> configureChargeOf(const RVec<Muon> &muons) const;

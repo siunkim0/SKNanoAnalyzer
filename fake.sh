@@ -632,3 +632,29 @@
 #SKNano.py -a closnff -i DYJets       -e $ERA -n 40 --userflags OpenJet,Skip2Mu --tag closdyee
 #SKNano.py -a closnff -i DYJets10to50 -e $ERA -n 40 --userflags OpenJet,Skip2Mu --tag closdyee
 #done
+
+# ---------------------------------------------------------------------------
+# (2026-10-28) closdata — DATA 검증 (neuralff: data 에서 잰 FR 을 data 에서 closure).
+#     검증 영역 두 개, 둘 다 Z tag + muon 하나가 fake 후보:
+#       Z->ee + mu  : channel 4 (2E1Mu). trigger 를 single electron 으로 바꿨다
+#                     (2016 Ele27_WPTight, 2017 Ele32_WPTight_L1DoubleEG, 2018
+#                     Ele32_WPTight; lead e > 30|35) — 2017 DoubleEG PD 가 sample DB 에
+#                     없어서. 그래서 DY 도 이 tag 로 다시 돈다 (closdyee 는 DoubleEG).
+#       Z->mumu + mu: channel 0 (3Mu), DoubleMuon. Z 쌍 tight + 세 번째 muon 만
+#                     FR slot, 두 OS 쌍이 모두 Z 창이면 veto — 전부 offline.
+#     data job 은 다른 channel 행도 쓴다 (PD overlap 제거 없음) -> offline 에서
+#     channel 4 는 SingleElectron/EGamma 파일, channel 0 은 DoubleMuon 파일에서만 읽는다.
+#     prompt MC (빼기용): WZ, ZZ, ttZ, ttW, tZq, VVV, ttH, VH, ZG, TTLL.
+#     로컬 검사 (2018 DY 3 파일 / EGamma 3 / DoubleMuon 2): "Trigger not found" 없음,
+#     channel 0-3 행은 이전 binary 와 branch 까지 동일.
+#     Run 2 4 era x (2 data + 15 MC) = 68 submission.
+#     출력: /gv0/.../closnff/OpenJet_Skip2Mu/{era}_closdata/
+#for ERA in 2016preVFP 2016postVFP 2017 2018; do
+#SKNano.py -a closnff -i DoubleMuon -e $ERA -n 40 --userflags OpenJet,Skip2Mu --tag closdata
+#if [ $ERA = 2018 ]; then EL=EGamma; else EL=SingleElectron; fi
+#SKNano.py -a closnff -i $EL        -e $ERA -n 40 --userflags OpenJet,Skip2Mu --tag closdata
+#for S in DYJets DYJets10to50 WZTo3LNu_amcatnlo ZZTo4L_powheg TTZToLLNuNu TTWToLNu tZq \
+#         WWW WWZ WZZ ZZZ TTHToNonbb VHToNonbb ZGToLLG TTLL_powheg; do
+#SKNano.py -a closnff -i $S -e $ERA -n 40 --userflags OpenJet,Skip2Mu --tag closdata
+#done
+#done

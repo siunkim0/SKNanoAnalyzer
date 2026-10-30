@@ -47,11 +47,22 @@ void closnff::initializeAnalyzer() {
                        "HLT_Mu8_TrkIsoVVL_Ele23_CaloIdL_TrackIdL_IsoVL_DZ"};
     }
 
-    //==== 2E1Mu 채널의 trigger: DoubleEG. 두 경로 모두 Run 2 네 era 의 DY
-    //==== NanoAOD 에 있고 HLT_Path.json 에 full lumi + "active": true 이다
-    //==== (2016 은 _DZ, 2017/18 은 non-DZ 가 표준이라 OR). Run 3 는 아직 안 쓴다.
-    DblEGTriggers = {"HLT_Ele23_Ele12_CaloIdL_TrackIdL_IsoVL_DZ",
-                     "HLT_Ele23_Ele12_CaloIdL_TrackIdL_IsoVL"};
+    //==== 2E1Mu 채널의 trigger: unprescaled single electron (2026-10-28). 데이터
+    //==== 검증을 네 era 한 PD 로 하려고 DoubleEG 에서 바꿨다 (2017 DoubleEG 가
+    //==== sample DB 에 없다): 2016 SingleElectron, 2017 SingleElectron, 2018 EGamma.
+    //==== 세 경로 모두 HLT_Path.json 에 full lumi + "active": true. 2017 의
+    //==== L1DoubleEG 경로는 EGM 이 권하는 L1 single-EG filter-bit 에뮬레이션을
+    //==== 하지 않는다 (데이터와 MC 에 똑같이 빠진다). Run 3 는 아직 안 쓴다.
+    if (DataEra == "2016preVFP" || DataEra == "2016postVFP") {
+        SglElTriggers = {"HLT_Ele27_WPTight_Gsf"};
+        cuts.ee_lead_el_pt = 30.;
+    } else if (DataEra == "2017") {
+        SglElTriggers = {"HLT_Ele32_WPTight_Gsf_L1DoubleEG"};
+        cuts.ee_lead_el_pt = 35.;
+    } else {
+        SglElTriggers = {"HLT_Ele32_WPTight_Gsf"};
+        cuts.ee_lead_el_pt = 35.;
+    }
 
     //==== 2Mu 채널의 trigger: unprescaled single muon. bkg.cc:14-22 와 동일하게
     //==== 맞춰야 bkg.cc 영역이 offline slice 로 정확히 재현된다.
@@ -342,7 +353,7 @@ void closnff::executeEvent() {
     bool passTrig = false;
     for (const auto &trig : (is3Mu ? DblMuTriggers
                                    : (is1E2Mu ? EMuTriggers
-                                              : (is2E1Mu ? DblEGTriggers : SglMuTriggers))))
+                                              : (is2E1Mu ? SglElTriggers : SglMuTriggers))))
         if (ev.PassTrigger(trig)) { passTrig = true; break; }
     if (!passTrig) return;
     if (is3Mu) FillHist("CutFlow_3Mu", 5.5, cfW, 10, 0., 10.);
@@ -360,7 +371,8 @@ void closnff::executeEvent() {
         if (!(looseMuons.at(0).Pt() > sgl_lead_mu_pt)) return;
         if (!(looseMuons.at(1).Pt() > cuts.sub_mu_pt)) return;
     } else if (is2E1Mu) {
-        //==== Ele23_Ele12 의 trigger-safe 문턱 (25 / 15). muon 은 object 문턱(10) 만.
+        //==== single-electron trigger 의 trigger-safe 문턱 (30|35 / 15, era 별).
+        //==== muon 은 object 문턱(10) 만.
         //==== 이 분기가 아래 1E2Mu else 보다 먼저 와야 한다 (그쪽은 muon 둘을 본다).
         if (!(looseElectrons.at(0).Pt() > cuts.ee_lead_el_pt)) return;
         if (!(looseElectrons.at(1).Pt() > cuts.ee_sub_el_pt))  return;
@@ -644,6 +656,18 @@ void closnff::executeEvent() {
 // MeasFakeRateV4::getMotherJetFlavour 가 그렇게 하고 fake.cc 도 그렇게 한다.
 // 하나라도 어긋나면 per-event flavour 분해를 per-muon 쪽과 비교할 수 없다.
 //==============================================================
+int closnff::SafeLeptonType(const Lepton &lep, const RVec<Gen> &gens) {
+    try {
+        return GetLeptonType(lep, gens);
+    } catch (const std::out_of_range &) {
+        //   첫 10 번만 알린다 — 그 뒤는 개수만 센다.
+        if (++nLeptonTypeCaught <= 10)
+            cerr << "[closnff::SafeLeptonType] GetLeptonType threw out_of_range "
+                    "(gen mother index -1 in the photon path); leptonType = 0" << endl;
+        return 0;
+    }
+}
+
 int closnff::FlavorCode(const Jet *jet) const {
     if (IsDATA) return -2;
     if (!jet)   return -1;                     // jetIdx 가 없거나 컬렉션에서 못 찾음
@@ -756,7 +780,7 @@ void closnff::fillMuonSlot(int slot, const Muon *mu) {
         }
     }
 
-    const int leptonType = (mu && !IsDATA) ? GetLeptonType(*mu, gens) : ISENT;
+    const int leptonType = (mu && !IsDATA) ? SafeLeptonType(*mu, gens) : ISENT;
 
     SetBranch(TREE, p + "pt",         mu ? (float)mu->Pt() : FSENT);
     SetBranch(TREE, p + "conept",     ptCorr);
@@ -934,7 +958,7 @@ void closnff::fillElectronSlot(int slot, const Electron *el) {
         }
     }
 
-    const int leptonType = (el && !IsDATA) ? GetLeptonType(*el, gens) : ISENT;
+    const int leptonType = (el && !IsDATA) ? SafeLeptonType(*el, gens) : ISENT;
 
     SetBranch(TREE, p + "pt",         el ? (float)el->Pt() : FSENT);
     SetBranch(TREE, p + "conept",     ptCorr);
