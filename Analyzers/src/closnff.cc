@@ -122,6 +122,12 @@ void closnff::initializeAnalyzer() {
         cuts.loose_miniiso_max = 0.6;
     }
 
+    //==== --userflags LooseNoSIP / LooseNoIso: muon loose WP 에서 SIP3D 컷 /
+    //==== miniiso 컷을 없앤다 (fake.cc 의 같은 블록 설명 참고). MatchWP / Run2WP
+    //==== 블록 뒤에 와야 한다. fake.cc 와 closnff.cc 의 이 값은 **반드시 같아야 한다**.
+    if (HasFlag("LooseNoSIP")) cuts.loose_sip3d_max   = 1e9;
+    if (HasFlag("LooseNoIso")) cuts.loose_miniiso_max = 1e9;
+
     //==== electron loose WP 도 Run 별로 다르다 (공식
     //==== Electron::Pass_HcToWALooseRun2 SIP3D<8 vs ...Run3 SIP3D<6;
     //==== miniiso 는 둘 다 0.4, MVA 컷은 위에서 이미 Run 별로 잡았다).

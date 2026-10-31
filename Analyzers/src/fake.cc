@@ -116,6 +116,22 @@ void fake::initializeAnalyzer() {
         cuts.loose_miniiso_max = 0.6;
     }
 
+    //==== --userflags LooseNoSIP / LooseNoIso: muon loose WP 에서 SIP3D 컷 /
+    //==== miniiso 컷을 **없앤다** (Run 3 ID-case 연구, neuralff plots/idcase run3_*).
+    //====   case 1 = LooseNoSIP           : loose miniiso < 0.4 (Run 3 기본), SIP3D 없음
+    //====   case 2 = MatchWP              : loose |SIP3D| < 5 && miniiso < 0.4
+    //====   case 3 = MatchWP,LooseNoIso   : loose |SIP3D| < 5, miniiso 없음
+    //==== 위의 MatchWP / Run2WP 블록 **뒤에** 와야 한다 — 그래야 MatchWP 이 정한
+    //==== 값 위에 한 쪽만 지울 수 있다.
+    //==== 왜 job 이 필요한가: loose 를 **넓히는** 것이라 offline 으로는 불가능하고
+    //==== (parquet 은 좁히는 것만 된다), loose 개수 (여기 정확히 1 개, closnff 3 개)
+    //==== 가 event selection 이므로 superset 하나에서 잘라 만들 수도 없다.
+    //==== tight / PtCorr / electron WP 은 건드리지 않는다 — tight 의 재정의는
+    //==== offline (neuralff config 의 label:) 에서 한다.
+    //==== fake.cc 와 closnff.cc 의 이 값은 **반드시 같아야 한다** (RESULTS 4g).
+    if (HasFlag("LooseNoSIP")) cuts.loose_sip3d_max   = 1e9;
+    if (HasFlag("LooseNoIso")) cuts.loose_miniiso_max = 1e9;
+
     //==== electron loose WP 도 Run 별로 다르다 (공식
     //==== Electron::Pass_HcToWALooseRun2 SIP3D<8 vs ...Run3 SIP3D<6;
     //==== miniiso 는 둘 다 0.4, MVA 컷은 위에서 이미 Run 별로 잡았다).

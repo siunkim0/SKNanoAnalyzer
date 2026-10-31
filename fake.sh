@@ -658,3 +658,31 @@
 #SKNano.py -a closnff -i $S -e $ERA -n 40 --userflags OpenJet,Skip2Mu --tag closdata
 #done
 #done
+
+# ---------------------------------------------------------------------------
+# (2026-10-30) r3id — Run 3 ID-case 연구 (neuralff plots/idcase/run3_*).
+#     공통: POG Medium, |dZ| < 0.1, TkRelIso < 0.4. loose WP 세 개 (tight 은 offline label):
+#       case 1  LooseNoSIP          loose miniiso < 0.4, SIP3D 없음  | tight miniiso < 0.1
+#       case 2  MatchWP             loose SIP3D < 5, miniiso < 0.4   | tight SIP3D < 3, miniiso < 0.1
+#       case 3  MatchWP,LooseNoIso  loose SIP3D < 5, miniiso 없음    | tight SIP3D < 3
+#     loose 를 넓히는 것 + 정확히 1 개 (fake) / 3 개 (closnff) loose 가 event selection
+#     이므로 case 마다 따로 돈다. case 2 도 다시 돈다 (ntuples_nff3 은 Run 3 loader fix 이전).
+#     case 2 의 DY 는 기존 OpenJet_MatchWP/{era}_closdywp 와 3Mu 채널이 같아야 한다 (gate).
+#     Run 3 4 era x 3 case x (QCD, TTLJ, DYJets, DYJets10to50) = 48 submission.
+#     출력 (userflag 가 directory level):
+#       fake/MakeTree_LooseNoSIP/{era}_nff3ns   closnff/OpenJet_Skip2Mu_LooseNoSIP/{era}_closdy3ns
+#       fake/MakeTree_MatchWP/{era}_nff3wp      closnff/OpenJet_Skip2Mu_MatchWP/{era}_closdy3wp
+#       fake/MakeTree_MatchWP_LooseNoIso/{era}_nff3ni
+#                                               closnff/OpenJet_Skip2Mu_MatchWP_LooseNoIso/{era}_closdy3ni
+#     제출 2026-10-30 14:39 (tamsa2), 48/48 완료. TTLJ 2022EE / 2023 의 Hadd node 6 개가
+#     8192 MB cgroup 에 걸려 held -> 376 byte stub. ai-tamsa1 에서 hadd -f -j 4 로 손으로
+#     합치고 (chunk rm 없이) chunk 와 entry 수를 하나하나 맞췄다. held job 은 condor_rm.
+#for ERA in 2022 2022EE 2023 2023BPix; do
+#for C in "LooseNoSIP nff3ns closdy3ns" "MatchWP nff3wp closdy3wp" "MatchWP,LooseNoIso nff3ni closdy3ni"; do
+#set -- $C
+#SKNano.py -a fake    -i 'QCD_Pt-*MuEnriched*' -e $ERA -n 40 --userflags MakeTree,$1        --tag $2
+#SKNano.py -a fake    -i TTLJ_powheg           -e $ERA -n 40 --userflags MakeTree,$1        --tag $2
+#SKNano.py -a closnff -i DYJets                -e $ERA -n 40 --userflags OpenJet,Skip2Mu,$1 --tag $3
+#SKNano.py -a closnff -i DYJets10to50          -e $ERA -n 40 --userflags OpenJet,Skip2Mu,$1 --tag $3
+#done
+#done
