@@ -686,3 +686,28 @@
 #SKNano.py -a closnff -i DYJets10to50          -e $ERA -n 40 --userflags OpenJet,Skip2Mu,$1 --tag $3
 #done
 #done
+
+# ---------------------------------------------------------------------------
+# (2026-10-31) r2id — r3id 의 Run 2 twin (neuralff plots/idcase/run3_case*/<region>/Run2/).
+#     WP 은 r3id 와 글자 그대로 같다. Run 2 기본 loose 는 SIP3D < 5 & miniiso < 0.6 이라
+#     세 case 모두 MatchWP (miniiso 0.4) 를 바탕에 깐다:
+#       case 1  MatchWP,LooseNoSIP  loose miniiso < 0.4, SIP3D 없음  | tight miniiso < 0.1
+#       case 2  MatchWP             loose SIP3D < 5, miniiso < 0.4   | tight SIP3D < 3, miniiso < 0.1
+#       case 3  MatchWP,LooseNoIso  loose SIP3D < 5, miniiso 없음    | tight SIP3D < 3
+#     case 2 의 DY 는 기존 OpenJet_MatchWP/{era}_closdywp 와 3Mu 채널이 같아야 한다 (gate).
+#     Run 2 4 era x 3 case x (QCD, TTLJ, DYJets, DYJets10to50) = 48 submission.
+#     TTLJ hadd 는 8 GB cgroup 에 걸릴 수 있다 (r3id 에서 6 개) -> 손으로 합친다.
+#     제출 2026-10-31 14:16 (tamsa2), 48/48 완료. TTLJ Hadd node 12 개 전부 (4 era x 3 case)
+#     8192 MB cgroup 에 걸려 held. ai-tamsa1 에서 hadd -f -j 4 로 손으로 합쳤다 (chunk rm
+#     없이). 2017/2018 은 -j 4 의 partial 파일이 / 의 /tmp (61 GB) 를 채워 hadd 가 exit 0
+#     으로 실패 -> 'hadd failed at the parallel stage', ~700 byte stub. -d /data6/... 로
+#     partial 위치를 옮겨 다시 합쳤다. 12 개 모두 chunk 와 entry 수 일치.
+#for ERA in 2016preVFP 2016postVFP 2017 2018; do
+#for C in "MatchWP,LooseNoSIP nff2ns closdy2ns" "MatchWP nff2wp closdy2wp" "MatchWP,LooseNoIso nff2ni closdy2ni"; do
+#set -- $C
+#SKNano.py -a fake    -i 'QCD_Pt-*MuEnriched*' -e $ERA -n 40 --userflags MakeTree,$1        --tag $2
+#SKNano.py -a fake    -i TTLJ_powheg           -e $ERA -n 40 --userflags MakeTree,$1        --tag $2
+#SKNano.py -a closnff -i DYJets                -e $ERA -n 40 --userflags OpenJet,Skip2Mu,$1 --tag $3
+#SKNano.py -a closnff -i DYJets10to50          -e $ERA -n 40 --userflags OpenJet,Skip2Mu,$1 --tag $3
+#done
+#done
