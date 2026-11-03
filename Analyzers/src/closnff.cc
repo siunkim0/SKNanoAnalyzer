@@ -575,9 +575,15 @@ void closnff::executeEvent() {
     //==== Step 12: 이벤트 요약량
     float HT = 0.;
     int nJet40 = 0;
+    //==== ev_ht25 / ev_njet25: fake.cc 의 ev_ht / ev_njet25 와 같은 정의 (pT > 25).
+    //==== 여기 jets 는 pT > 20 (ClosFakeRate) 이라 ev_ht 는 20-25 GeV jet 까지 더한다 —
+    //==== 학습 (fake.cc, jet_pt_min 25) 과 맞추려면 이 두 브랜치를 써야 한다 (2026-11-03).
+    float HT25 = 0.;
+    int nJet25 = 0;
     for (const auto &jet : jets) {
         HT += jet.Pt();
         if (jet.Pt() > 40.) nJet40++;   // 모델의 ev_njet40 과 같은 정의
+        if (jet.Pt() > 25.) { HT25 += jet.Pt(); nJet25++; }
     }
 
     //==== 이하 tree 기록. **모든 브랜치를 매 row 무조건 쓴다** —
@@ -607,6 +613,8 @@ void closnff::executeEvent() {
     SetBranch(TREE, "ev_ht",      HT);
     SetBranch(TREE, "ev_njet",    (int)jets.size());
     SetBranch(TREE, "ev_njet40",  nJet40);
+    SetBranch(TREE, "ev_ht25",    HT25);
+    SetBranch(TREE, "ev_njet25",  nJet25);
     SetBranch(TREE, "ev_nbjet",   (int)bjets.size());
     //==== ev.nPV() 를 써야 한다 (fake.cc:876 과 같다). loader 의 raw 멤버
     //     PV_npvs 는 **Run 3 전용**이다 — Run 2 에서는 SKNanoLoader.cc:1408 이

@@ -711,3 +711,25 @@
 #SKNano.py -a closnff -i DYJets10to50          -e $ERA -n 40 --userflags OpenJet,Skip2Mu,$1 --tag $3
 #done
 #done
+
+# ---------------------------------------------------------------------------
+# (2026-11-03) r23dyht — r3id / r2id 의 DY 만 다시: closnff 에 ev_ht25 / ev_njet25 추가.
+#     학습 (fake.cc, jet pT > 25) 의 ev_ht / ev_njet25 와 같은 정의를 DY 3mu tree 에도
+#     쓰기 위해서다 (closnff 의 jets 는 pT > 20 이라 기존 ev_ht 는 정의가 다르다).
+#     다른 브랜치는 bit 단위로 같다 (로컬 2 파일 검사). 새 tag 라 기존 closdy{2,3}* 는 그대로.
+#     2 run x 4 era x 3 case x (DYJets, DYJets10to50) = 48 submission.
+#     출력: closnff/OpenJet_Skip2Mu_<flags>/{era}_closdyh{2,3}{ns,wp,ni}/
+#for ERA in 2022 2022EE 2023 2023BPix; do
+#for C in "LooseNoSIP closdyh3ns" "MatchWP closdyh3wp" "MatchWP,LooseNoIso closdyh3ni"; do
+#set -- $C
+#SKNano.py -a closnff -i DYJets       -e $ERA -n 40 --userflags OpenJet,Skip2Mu,$1 --tag $2
+#SKNano.py -a closnff -i DYJets10to50 -e $ERA -n 40 --userflags OpenJet,Skip2Mu,$1 --tag $2
+#done
+#done
+#for ERA in 2016preVFP 2016postVFP 2017 2018; do
+#for C in "MatchWP,LooseNoSIP closdyh2ns" "MatchWP closdyh2wp" "MatchWP,LooseNoIso closdyh2ni"; do
+#set -- $C
+#SKNano.py -a closnff -i DYJets       -e $ERA -n 40 --userflags OpenJet,Skip2Mu,$1 --tag $2
+#SKNano.py -a closnff -i DYJets10to50 -e $ERA -n 40 --userflags OpenJet,Skip2Mu,$1 --tag $2
+#done
+#done
